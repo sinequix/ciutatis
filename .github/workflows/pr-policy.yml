@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   policy:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, ian-hetzner]
     timeout-minutes: 10
 
     steps:

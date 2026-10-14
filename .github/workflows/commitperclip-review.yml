@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   review:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, ian-hetzner]
     timeout-minutes: 5
     steps:
       - name: Checkout base branch (never PR code)

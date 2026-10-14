@@ -25,7 +25,7 @@ env:
 
 jobs:
   build-and-sign:
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, ian-hetzner]
     steps:
       - uses: actions/checkout@v7
 
