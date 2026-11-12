@@ -1719,6 +1719,7 @@ export {
   telemetryConfigSchema,
   type TelemetryConfig,
   type PaperclipConfig,
+  type CiutatisConfig,
   type LlmConfig,
   type DatabaseBackupConfig,
   type DatabaseConfig,

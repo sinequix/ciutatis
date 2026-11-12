@@ -144,4 +144,19 @@ export {
   type InstitutionPortabilityImport,
 } from "./validators/index.js";
 
+export {
+  deriveTenantRoute,
+  deriveTenantUrl,
+  parseTenantRoutePathname,
+} from "./tenant-routing.js";
+
+export {
+  ARGENTINA_TENANT_ROUTING_CONFIG,
+  US_TENANT_ROUTING_CONFIG,
+  getTenantRoutingCountryConfig,
+} from "./tenant-routing-configs/index.js";
+
+export type { TenantProvisioner } from "./cloudflare-provisioning.js";
 export { CloudflareTenantProvisioner, MockTenantProvisioner } from "./cloudflare-provisioning.js";
+
+export type { CreateTenantInstance, UpdateTenantInstance } from "./validators/tenant-instance.js";
