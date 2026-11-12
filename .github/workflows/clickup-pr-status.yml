@@ -1,0 +1,181 @@
+name: ClickUp PR status
+
+# Organization secret CLICKUP_API_TOKEN is read as secrets.CLICKUP_API_TOKEN.
+# The value is never printed. This job does not check out the repository and
+# does not pass the token to a script from the pull request.
+# A pull request whose head repository is not this repository does not receive
+# organization secrets; it skips and succeeds. This repository is itself a fork,
+# so head.repo.fork is not the signal for that.
+# A missing secret skips and succeeds.
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - closed
+  pull_request_review:
+    types:
+      - submitted
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    name: ClickUp PR status
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Update ClickUp task or skip
+        shell: bash
+        env:
+          CLICKUP_API_TOKEN: ${{ secrets.CLICKUP_API_TOKEN }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
+          REVIEW_STATE: ${{ github.event.review.state }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+        run: |
+          set -euo pipefail
+
+          if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            echo "clickup_secret=unavailable_fork"
+            echo "clickup_update=skipped_fork"
+            echo "Fork pull request does not receive CLICKUP_API_TOKEN. Skipping."
+            exit 0
+          fi
+
+          if [ -z "${CLICKUP_API_TOKEN:-}" ]; then
+            echo "clickup_secret=absent"
+            echo "clickup_update=skipped_missing_secret"
+            echo "CLICKUP_API_TOKEN is not set for this repository. Skipping."
+            exit 0
+          fi
+
+          echo "clickup_secret=present"
+
+          if [ "${EVENT_ACTION}" = "synchronize" ]; then
+            echo "clickup_update=skipped_synchronize"
+            echo "A new commit does not change ClickUp status."
+            exit 0
+          fi
+
+          status=""
+          label=""
+          case "${EVENT_NAME}:${EVENT_ACTION}:${REVIEW_STATE}:${PR_MERGED}" in
+            pull_request:opened:*:*)
+              status="pr abierto"
+              label="PR opened"
+              ;;
+            pull_request_review:submitted:approved:*)
+              status="en revisión humana"
+              label="Review approved"
+              ;;
+            pull_request:closed:*:true)
+              status="mergeada"
+              label="PR merged"
+              ;;
+            *)
+              echo "clickup_update=skipped_unhandled_event"
+              echo "No ClickUp update for this event."
+              exit 0
+              ;;
+          esac
+
+          ids="$(
+            printf '%s\n' "$PR_BRANCH" "$PR_TITLE" \
+              | grep -oE '(^|[^A-Za-z0-9])CU-[A-Za-z0-9]+' \
+              | grep -oE 'CU-[A-Za-z0-9]+' \
+              | sort -u \
+              || true
+          )"
+
+          if [ -z "$ids" ]; then
+            echo "clickup_update=skipped_no_task_id"
+            echo "No CU-<id> in the pull request branch or title. Skipping."
+            exit 0
+          fi
+
+          id_count="$(printf '%s\n' "$ids" | grep -c .)"
+          if [ "$id_count" -ne 1 ]; then
+            echo "clickup_update=failed_ambiguous_task_id"
+            echo "Expected one CU-<id> in the branch or title."
+            printf '%s\n' "$ids"
+            exit 1
+          fi
+
+          raw="$(printf '%s\n' "$ids")"
+          task_id="${raw#CU-}"
+          if ! [[ "$task_id" =~ ^[A-Za-z0-9]+$ ]]; then
+            echo "clickup_update=failed_bad_task_id"
+            exit 1
+          fi
+
+          export CLICKUP_STATUS="$status"
+          export CLICKUP_LABEL="$label"
+          export CLICKUP_TASK_ID="$task_id"
+
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          token = os.environ["CLICKUP_API_TOKEN"]
+          task_id = os.environ["CLICKUP_TASK_ID"]
+          status = os.environ["CLICKUP_STATUS"]
+          label = os.environ["CLICKUP_LABEL"]
+          pr_url = os.environ["PR_URL"]
+          head_sha = os.environ["HEAD_SHA"]
+
+          if not task_id.isalnum():
+              print("clickup_update=failed_bad_task_id")
+              sys.exit(1)
+
+          def redact(text):
+              if token and token in text:
+                  return text.replace(token, "[redacted]")
+              return text
+
+          def call(method, path, payload):
+              body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+              req = urllib.request.Request(
+                  "https://api.clickup.com/api/v2" + path,
+                  data=body,
+                  method=method,
+                  headers={
+                      "Authorization": token,
+                      "Content-Type": "application/json; charset=utf-8",
+                      "Accept": "application/json",
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=30) as resp:
+                      resp.read()
+                      print("ClickUp %s %s -> %s" % (method, path, resp.status))
+              except urllib.error.HTTPError as err:
+                  detail = redact(err.read().decode("utf-8", errors="replace"))
+                  print("ClickUp %s %s -> HTTP %s" % (method, path, err.code))
+                  print(detail[:1500])
+                  print("clickup_update=failed")
+                  sys.exit(1)
+              except urllib.error.URLError as err:
+                  print("ClickUp %s %s -> %s" % (method, path, redact(str(err.reason))))
+                  print("clickup_update=failed")
+                  sys.exit(1)
+
+          comment = "%s\n%s\nHead SHA: %s" % (label, pr_url, head_sha)
+          call("PUT", "/task/%s" % task_id, {"status": status})
+          call(
+              "POST",
+              "/task/%s/comment" % task_id,
+              {"comment_text": comment, "notify_all": False},
+          )
+          print("clickup_update=updated task=CU-%s" % task_id)
+          PY
