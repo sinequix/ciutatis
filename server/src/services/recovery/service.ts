@@ -1752,37 +1752,6 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       ].join("\n"),
       { runId: input.run.id }
     );
-    // Idempotency guard: if we've already emitted the escalation comment for this
-    // (sourceIssue, evaluationIssue) pair, skip. Without this, every subsequent scan
-    // cycle while the evaluation issue is still open re-fires the comment and spams
-    // the source-issue thread. The activity log row written below is the persistence
-    // record we check against — a single row per pair is enough to suppress repeats
-    // even after process restarts.
-    const [priorEscalation] = await db
-      .select({ id: activityLog.id })
-      .from(activityLog)
-      .where(
-        and(
-          eq(activityLog.companyId, input.sourceIssue.companyId),
-          eq(activityLog.action, "heartbeat.output_stale_escalated"),
-          eq(activityLog.entityType, "issue"),
-          eq(activityLog.entityId, input.sourceIssue.id),
-          sql`${activityLog.details} ->> 'evaluationIssueId' = ${input.evaluationIssue.id}`,
-        ),
-      )
-      .limit(1);
-    if (priorEscalation) return false;
-    // Evaluation issues are observability-only — do NOT add them to blockedByIssueIds.
-    // They are already parented under the source issue. Adding them as hard blockers
-    // creates a self-amplifying loop: block → silence → new alert → block again.
-    await issuesSvc.addComment(input.sourceIssue.id, [
-      "Paperclip detected critical output silence on this issue's active run.",
-      "",
-      `- Evaluation issue: ${input.evaluationIssue.identifier ?? input.evaluationIssue.id}`,
-      `- Run: \`${input.run.id}\``,
-      "",
-      "Review the evaluation issue above. The active run has not been cancelled.",
-    ].join("\n"), { runId: input.run.id });
     await logActivity(db, {
       companyId: input.sourceIssue.companyId,
       actorType: "system",
@@ -1934,14 +1903,6 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
           { runId: input.run.id }
         );
         await ensureSourceIssueBlockedByStaleEvaluation({
-        await issuesSvc.addComment(existing.id, [
-          "Critical output silence threshold crossed.",
-          "",
-          `- Run: \`${input.run.id}\``,
-          `- Silent for: ${formatDuration(evidence.silenceAgeMs)}`,
-          `- Last output at: ${input.run.lastOutputAt?.toISOString() ?? "none recorded"}`,
-        ].join("\n"), { runId: input.run.id });
-        await ensureSourceIssueCommentedForStaleEvaluation({
           sourceIssue,
           evaluationIssue: existing,
           run: input.run,
@@ -2927,41 +2888,6 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
         input.issue.id,
         `${input.comment ?? ""}${recoveryLine}`
       );
-    const shouldPostEscalationComment =
-      recoveryAction.attemptCount === 1 ||
-      input.recoveryCause === "workspace_validation_failed" ||
-      input.recoveryCause === "configuration_incomplete";
-    if (shouldPostEscalationComment) {
-      const escalationCommentMarker = `Recovery action: \`${recoveryAction.id}\``;
-
-      const hasEscalationComment = await db
-        .select({ id: issueComments.id, body: issueComments.body, metadata: issueComments.metadata })
-        .from(issueComments)
-        .where(
-          and(
-            eq(issueComments.issueId, input.issue.id),
-            eq(issueComments.authorType, "system"),
-          ),
-        )
-        .orderBy(desc(issueComments.createdAt))
-        .limit(50)
-        .then((rows) => rows.some((row) =>
-          (row.body ?? "").includes(escalationCommentMarker) ||
-          noticeMetadataReferencesRecoveryAction(row.metadata, recoveryAction.id),
-        ));
-
-      if (!hasEscalationComment) {
-        if (notice) {
-          await issuesSvc.addComment(input.issue.id, notice.body, {}, {
-            authorType: "system",
-            presentation: notice.presentation,
-            metadata: notice.metadata,
-          });
-        } else {
-          await issuesSvc.addComment(input.issue.id, `${input.comment ?? ""}${recoveryLine}`, {}, {
-            authorType: "system",
-          });
-      }
     }
 
     await logActivity(db, {
@@ -3761,9 +3687,6 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
         .filter((row): row is { companyId: string; issueId: string; status: string } => row.status !== null)
         .map((row) => ({ companyId: row.companyId, issueId: row.issueId, status: row.status })),
       openRecoveryIssues,
-      pendingInteractions: interactionRows,
-      pendingApprovals: approvalRows,
-      openRecoveryIssues: openRecoveryIssues.concat(recoveryActionRows),
       now: new Date(),
     });
   }

@@ -35,7 +35,6 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc && cp -r src/migrations dist/migrations",
     "check:migrations": "tsx src/check-migration-numbering.ts && tsx src/check-migration-safety.ts",
     "build": "pnpm run check:migrations && tsc && cp -r src/migrations dist/migrations",
     "clean": "rm -rf dist",

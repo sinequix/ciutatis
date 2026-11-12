@@ -4,25 +4,6 @@ export const queryKeys = {
     detail: (id: string) => ["companies", id] as const,
     stats: ["companies", "stats"] as const,
   },
-    listRecent: (companyId: string) =>
-    updateStatus: (companyId: string, skillId: string) =>
-    forkPrecheck: (companyId: string, skillId: string) =>
-    file: (companyId: string, skillId: string, relativePath: string) =>
-    catalog: (filters: { kind?: string; category?: string; q?: string } = {}) =>
-    catalogFile: (catalogRef: string, relativePath: string) =>
-    testInputs: (companyId: string, skillId: string) =>
-    testRunTemplates: (companyId: string) =>
-    testRuns: (companyId: string, skillId: string, inputId?: string | null) =>
-    testRunDetail: (companyId: string, skillId: string, runId: string) =>
-  },
-  teamCatalog: {
-    catalog: (filters: { kind?: string; category?: string; q?: string } = {}) =>
-      ["team-catalog", "catalog", filters.kind ?? "__all-kinds__", filters.category ?? "__all-categories__", filters.q ?? ""] as const,
-    catalogDetail: (catalogRef: string) => ["team-catalog", "catalog", "detail", catalogRef] as const,
-    catalogFile: (catalogRef: string, relativePath: string) =>
-      ["team-catalog", "catalog", "file", catalogRef, relativePath] as const,
-    installed: (companyId: string) => ["team-catalog", "installed", companyId] as const,
-  },
   agents: {
     list: (companyId: string) => ["agents", companyId] as const,
     detail: (id: string) => ["agents", "detail", id] as const,
@@ -41,9 +22,6 @@ export const queryKeys = {
     list: (companyId: string) => ["issues", companyId] as const,
     search: (companyId: string, q: string, projectId?: string) =>
       ["issues", companyId, "search", q, projectId ?? "__all-projects__"] as const,
-    mentionPool: (companyId: string) => ["issues", companyId, "mention-pool"] as const,
-    search: (companyId: string, q: string, projectId?: string, limit?: number) =>
-      ["issues", companyId, "search", q, projectId ?? "__all-projects__", limit ?? "__no-limit__"] as const,
     listAssignedToMe: (companyId: string) => ["issues", companyId, "assigned-to-me"] as const,
     listTouchedByMe: (companyId: string) => ["issues", companyId, "touched-by-me"] as const,
     listUnreadTouchedByMe: (companyId: string) => ["issues", companyId, "unread-touched-by-me"] as const,
@@ -54,15 +32,6 @@ export const queryKeys = {
       ["issues", companyId, "project", projectId] as const,
     detail: (id: string) => ["issues", "detail", id] as const,
     comments: (issueId: string) => ["issues", "comments", issueId] as const,
-    commentsList: (issueId: string) => ["issues", "comments", issueId, "list"] as const,
-    interactions: (issueId: string) => ["issues", "interactions", issueId] as const,
-    acceptedPlanDecompositions: (issueId: string) =>
-      ["issues", "accepted-plan-decompositions", issueId] as const,
-    feedbackVotes: (issueId: string) => ["issues", "feedback-votes", issueId] as const,
-    costSummary: (issueId: string, options: { excludeRoot?: boolean } = {}) =>
-      options.excludeRoot
-        ? (["issues", "cost-summary", issueId, "exclude-root"] as const)
-        : (["issues", "cost-summary", issueId] as const),
     attachments: (issueId: string) => ["issues", "attachments", issueId] as const,
     attachmentPreview: (attachmentId: string) => ["issues", "attachment-preview", attachmentId] as const,
     documents: (issueId: string) => ["issues", "documents", issueId] as const,
@@ -77,80 +46,11 @@ export const queryKeys = {
     workProducts: (issueId: string) => ["issues", "work-products", issueId] as const,
     listPluginOperationsByProject: (companyId: string, projectId: string, pluginId?: string | null) =>
       ["issues", companyId, "plugin-operations", projectId, pluginId ?? "__all-plugins__"] as const,
-    fileResources: (
-      issueId: string,
-      options: {
-        workspace?: string;
-        projectId?: string | null;
-        workspaceId?: string | null;
-        path?: string | null;
-        mode?: string;
-        q?: string | null;
-        limit?: number;
-        offset?: number;
-      } = {},
-    ) =>
-      ["issues", "file-resources", issueId, "list", options] as const,
-    fileResource: (
-      issueId: string,
-      query: { path: string; workspace?: string; projectId?: string | null; workspaceId?: string | null },
-    ) =>
-      ["issues", "file-resources", issueId, "resolve", query] as const,
-    fileResourceContent: (
-      issueId: string,
-      query: { path: string; workspace?: string; projectId?: string | null; workspaceId?: string | null },
-    ) =>
-      ["issues", "file-resources", issueId, "content", query] as const,
-  },
-  routines: {
-    list: (companyId: string, filters?: { projectId?: string | null }) =>
-      ["routines", companyId, filters?.projectId ?? "__all-projects__"] as const,
-    detail: (id: string) => ["routines", "detail", id] as const,
-    runs: (id: string) => ["routines", "runs", id] as const,
-    revisions: (id: string) => ["routines", "revisions", id] as const,
-    activity: (companyId: string, id: string) => ["routines", "activity", companyId, id] as const,
-    documentAnnotations: (routineId: string, key: "description", status: "open" | "resolved" | "all" = "all") =>
-      ["routines", "document-annotations", routineId, key, status] as const,
-  },
-  pipelines: {
-    list: (companyId: string) => ["pipelines", companyId] as const,
-    detail: (pipelineId: string) => ["pipelines", "detail", pipelineId] as const,
-    cases: (pipelineId: string) => ["pipelines", "cases", pipelineId] as const,
-    caseDetail: (caseId: string) => ["pipelines", "item", caseId] as const,
-    caseChildren: (caseId: string) => ["pipelines", "item", caseId, "children"] as const,
-    caseEvents: (caseId: string) => ["pipelines", "item", caseId, "events"] as const,
-    caseIssueLinks: (caseId: string) => ["pipelines", "item", caseId, "issue-links"] as const,
-    caseOutputs: (caseId: string) => ["pipelines", "item", caseId, "outputs"] as const,
-    caseDocument: (caseId: string, key: string) => ["pipelines", "item", caseId, "document", key] as const,
-    caseDocumentRevisions: (caseId: string, key: string) =>
-      ["pipelines", "item", caseId, "document-revisions", key] as const,
-    intakeForm: (pipelineId: string) => ["pipelines", "intake-form", pipelineId] as const,
-    health: (pipelineId: string) => ["pipelines", "health", pipelineId] as const,
-    document: (pipelineId: string, key: string) => ["pipelines", "document", pipelineId, key] as const,
-    documentRevisions: (pipelineId: string, key: string) =>
-      ["pipelines", "document-revisions", pipelineId, key] as const,
-    attention: (companyId: string) => ["pipelines", "attention", companyId] as const,
-    reviewCases: (companyId: string) => ["pipelines", "review-cases", companyId] as const,
-    learnings: (companyId: string, offset: number) => ["pipelines", "learnings", companyId, offset] as const,
   },
   executionWorkspaces: {
     list: (companyId: string, filters?: Record<string, string | boolean | undefined>) =>
       ["execution-workspaces", companyId, filters ?? {}] as const,
     detail: (id: string) => ["execution-workspaces", "detail", id] as const,
-    summaryList: (companyId: string, filters?: Record<string, string | boolean | undefined>) =>
-      ["execution-workspaces", companyId, "summary", filters ?? {}] as const,
-    overview: (companyId: string, filters?: Record<string, string | number | boolean | undefined>) =>
-      ["execution-workspaces", companyId, "overview", filters ?? {}] as const,
-    closeReadiness: (id: string) => ["execution-workspaces", "close-readiness", id] as const,
-    workspaceOperations: (id: string) => ["execution-workspaces", "workspace-operations", id] as const,
-  },
-  environments: {
-    list: (companyId: string) => ["environments", companyId] as const,
-    capabilities: (companyId: string) => ["environment-capabilities", companyId] as const,
-    customImageTemplate: (environmentId: string) =>
-      ["environments", environmentId, "custom-image-template"] as const,
-    customImageSetupSession: (sessionId: string) =>
-      ["environment-custom-image-setup-sessions", sessionId] as const,
   },
   projects: {
     list: (companyId: string) => ["projects", companyId] as const,
@@ -184,22 +84,6 @@ export const queryKeys = {
     revisions: (routineId: string) => ["routines", "revisions", routineId] as const,
     runs: (routineId: string) => ["routines", "runs", routineId] as const,
     activity: (companyId: string, routineId: string) => ["routines", companyId, routineId, "activity"] as const,
-  artifacts: {
-    list: (
-      companyId: string,
-      kind?: string,
-      q?: string,
-      groupBy?: string,
-      groupIssueId?: string,
-    ) =>
-      [
-        "artifacts",
-        companyId,
-        kind ?? "all",
-        q ?? "",
-        groupBy ?? "none",
-        groupIssueId ?? "",
-      ] as const,
   },
   budgets: {
     overview: (companyId: string) => ["budgets", "overview", companyId] as const,
@@ -231,8 +115,6 @@ export const queryKeys = {
   },
   instance: {
     adminOverview: ["instance", "admin-overview"] as const,
-    settings: ["instance", "settings"] as const,
-    generalSettings: ["instance", "general-settings"] as const,
     schedulerHeartbeats: ["instance", "scheduler-heartbeats"] as const,
     experimentalSettings: ["instance", "experimental-settings"] as const,
     tenantProvisioning: ["instance", "tenant-provisioning"] as const,
@@ -267,10 +149,6 @@ export const queryKeys = {
     myUserSecrets: (companyId: string) => ["my-user-secrets", companyId] as const,
   },
   dashboard: (companyId: string) => ["dashboard", companyId] as const,
-  attention: (companyId: string) => ["attention", companyId] as const,
-  workTimeline: (companyId: string, lens?: string) => ["work-timeline", companyId, lens ?? "all"] as const,
-  userProfile: (companyId: string, userSlug: string) =>
-    ["user-profile", companyId, userSlug] as const,
   sidebarBadges: (companyId: string) => ["sidebar-badges", companyId] as const,
   activity: (companyId: string) => ["activity", companyId] as const,
   costs: (companyId: string, from?: string, to?: string) =>

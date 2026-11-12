@@ -1,8 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { NavLink } from "@/lib/router";
 import { cn } from "../lib/utils";
-import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
-import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
 import { useSidebar } from "../context/SidebarContext";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { LucideIcon } from "lucide-react";
@@ -48,13 +46,6 @@ interface SidebarNavItemProps {
   labelClassName?: string;
   badge?: number;
   badgeTone?: "default" | "danger";
-  /**
-   * Accessible noun for the numeric badge when collapsed to the rail, where the
-   * count is rendered as a dot (e.g. `badgeLabel="unread"` → "Inbox, 28 unread").
-   */
-  badgeLabel?: string;
-  textBadge?: string;
-  textBadgeTone?: "default" | "amber";
   alert?: boolean;
   liveCount?: number;
   /**
@@ -80,9 +71,6 @@ export function SidebarNavItem({
   labelClassName,
   badge,
   badgeTone = "default",
-  badgeLabel,
-  textBadge,
-  textBadgeTone = "default",
   alert = false,
   liveCount,
   active,
@@ -160,21 +148,6 @@ export function SidebarNavItem({
       </span>
       <span className="flex-1 truncate">{label}</span>
       {liveCount != null && liveCount > 0 && (
-      <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : cn("min-w-0 flex-1 truncate", labelClassName)}>{label}</span>
-      {!rail && trailing}
-      {!rail && textBadge && (
-        <Badge variant="ghost"
-          className={cn(
-            "ml-auto px-1.5 text-(length:--text-nano) leading-none",
-            textBadgeTone === "amber"
-              ? "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          {textBadge}
-        </Badge>
-      )}
-      {!rail && (hasLive || liveAccessory) && (
         <span className="ml-auto flex items-center gap-1.5">
           {liveAccessory}
           {hasLive && (

@@ -161,9 +161,6 @@ export interface PluginToolDispatcher {
   registerPluginTools(
     pluginId: string,
     manifest: CiutatisPluginManifestV1,
-    pluginKey: string,
-    manifest: PaperclipPluginManifestV1,
-    pluginDbId: string,
   ): void;
 
   /**
@@ -437,9 +434,6 @@ export function createPluginToolDispatcher(
     registerPluginTools(
       pluginId: string,
       manifest: CiutatisPluginManifestV1,
-      pluginKey: string,
-      manifest: PaperclipPluginManifestV1,
-      pluginDbId: string,
     ): void {
       registry.registerPlugin(pluginKey, manifest, pluginDbId);
     },

@@ -1,8 +1,5 @@
 import { Router } from "express";
 import type { Db } from "@paperclipai/db";
-import { Router, type Request } from "express";
-import { eq } from "drizzle-orm";
-import { heartbeatRuns, type Db } from "@paperclipai/db";
 import {
   addApprovalCommentSchema,
   createApprovalSchema,
@@ -65,46 +62,6 @@ export function approvalRoutes(
 
   function decisionUserId(req: Parameters<typeof assertBoard>[0]): string {
     return req.actor.userId ?? "board";
-  async function assertApprovalAccessAllowed(req: Request, res: any, companyId: string) {
-    const decision = await access.decide({
-      actor: req.actor,
-      action: "company_scope:read",
-      resource: { type: "company", companyId },
-    });
-    if (decision.allowed) return true;
-    res.status(403).json({ error: "Approvals are outside this actor's authorization boundary" });
-    return false;
-  }
-
-  async function assertApprovalMutationAllowedByRunContext(req: Request, res: any, companyId: string) {
-    if (req.actor.type !== "agent") return true;
-    const runId = req.actor.runId?.trim();
-    if (!runId || !req.actor.agentId) return true;
-
-    const run = await db
-      .select({
-        id: heartbeatRuns.id,
-        companyId: heartbeatRuns.companyId,
-        agentId: heartbeatRuns.agentId,
-        contextSnapshot: heartbeatRuns.contextSnapshot,
-      })
-      .from(heartbeatRuns)
-      .where(eq(heartbeatRuns.id, runId))
-      .then((rows) => rows[0] ?? null);
-    if (!run || run.companyId !== companyId || run.agentId !== req.actor.agentId) return true;
-    if (!isStatusOnlyCheapRecoveryContext(run.contextSnapshot)) return true;
-
-    res.status(403).json({
-      error: "Cheap status-only recovery runs cannot create or modify approvals",
-      details: {
-        companyId,
-        runId: run.id,
-        modelProfile: "cheap",
-        recoveryIntent: "status_only",
-        resumeRequiresNormalModel: true,
-      },
-    });
-    return false;
   }
 
   router.get("/companies/:companyId/approvals", async (req, res) => {

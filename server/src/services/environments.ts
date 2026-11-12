@@ -109,46 +109,6 @@ function toEnvironment(row: EnvironmentRow): Environment {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
-    createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
-  } as Environment;
-}
-
-type EnvironmentListFilters = {
-  status?: string;
-  driver?: string;
-};
-
-function resolveListFilters(
-  companyIdOrFilters?: string | EnvironmentListFilters,
-  maybeFilters?: EnvironmentListFilters,
-): EnvironmentListFilters {
-  if (typeof companyIdOrFilters === "string") {
-    return maybeFilters ?? {};
-  }
-  return companyIdOrFilters ?? {};
-}
-
-function resolveCreateInput(
-  companyIdOrInput: string | CreateEnvironment,
-  maybeInput?: CreateEnvironment,
-): CreateEnvironment {
-  if (typeof companyIdOrInput === "string") {
-    if (!maybeInput) throw new Error("Create environment input is required");
-    return maybeInput;
-  }
-  return companyIdOrInput;
-}
-
-function resolveKubernetesConfig(
-  companyIdOrConfig: string | KubernetesEnvironmentConfigInput,
-  maybeConfig?: KubernetesEnvironmentConfigInput,
-): KubernetesEnvironmentConfigInput {
-  if (typeof companyIdOrConfig === "string") {
-    if (!maybeConfig) throw new Error("Kubernetes environment config is required");
-    return maybeConfig;
-  }
-  return companyIdOrConfig;
 }
 
 function toEnvironmentLease(row: EnvironmentLeaseRow): EnvironmentLease {
@@ -404,13 +364,6 @@ export function environmentService(db: Db) {
           status: (input.status ?? "active") as string,
           config: (input.config ?? {}) as Record<string, unknown>,
           metadata: input.metadata as Record<string, unknown> | null | undefined,
-          name: input.name,
-          description: input.description ?? null,
-          driver: input.driver,
-          status: input.status ?? "active",
-          config: input.config ?? {},
-          envVars: (input as CreateEnvironment & { envVars?: Record<string, unknown> }).envVars ?? {},
-          metadata: input.metadata ?? null,
           createdAt: now,
           updatedAt: now,
         })
@@ -441,15 +394,6 @@ export function environmentService(db: Db) {
       if (patch.status !== undefined) values.status = patch.status as string;
       if (patch.config !== undefined) values.config = patch.config as Record<string, unknown>;
       if (patch.metadata !== undefined) values.metadata = (patch.metadata ?? null) as Record<string, unknown> | null;
-      if (patch.name !== undefined) values.name = patch.name;
-      if (patch.description !== undefined) values.description = patch.description ?? null;
-      if (patch.driver !== undefined) values.driver = patch.driver;
-      if (patch.status !== undefined) values.status = patch.status;
-      if (patch.config !== undefined) values.config = patch.config;
-      if ("envVars" in patch && patch.envVars !== undefined) {
-        values.envVars = (patch.envVars ?? {}) as Record<string, unknown>;
-      }
-      if (patch.metadata !== undefined) values.metadata = patch.metadata ?? null;
 
       const row = await db
         .update(environments)

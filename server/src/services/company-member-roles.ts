@@ -18,38 +18,6 @@ export function grantsForHumanRole(
 ): Array<{ permissionKey: string; scope: Record<string, unknown> | null }> {
   // Ciutatis: simplified grants - board has full access
   return [];
-  role: HumanCompanyMembershipRole
-): Array<{
-  permissionKey: (typeof PERMISSION_KEYS)[number];
-  scope: Record<string, unknown> | null;
-}> {
-  switch (role) {
-    case "owner":
-      return [
-        { permissionKey: "agents:create", scope: null },
-        { permissionKey: "agents:configure", scope: null },
-        { permissionKey: "skills:create", scope: null },
-        { permissionKey: "environments:manage", scope: null },
-        { permissionKey: "users:invite", scope: null },
-        { permissionKey: "users:manage_permissions", scope: null },
-        { permissionKey: "tasks:assign", scope: null },
-        { permissionKey: "joins:approve", scope: null },
-      ];
-    case "admin":
-      return [
-        { permissionKey: "agents:create", scope: null },
-        { permissionKey: "agents:configure", scope: null },
-        { permissionKey: "skills:create", scope: null },
-        { permissionKey: "environments:manage", scope: null },
-        { permissionKey: "users:invite", scope: null },
-        { permissionKey: "tasks:assign", scope: null },
-        { permissionKey: "joins:approve", scope: null },
-      ];
-    case "operator":
-      return [{ permissionKey: "tasks:assign", scope: null }];
-    case "viewer":
-      return [];
-  }
 }
 
 export function resolveHumanInviteRole(

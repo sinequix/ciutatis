@@ -589,20 +589,6 @@ function assertSelectableProviderConfig(config: {
 export function secretService(db: Db) {
   async function getById(id: string) {
     return db
-  const authorization = authorizationService(db);
-
-  type NormalizeEnvOptions = {
-    strictMode?: boolean;
-    fieldPath?: string;
-  };
-  type NormalizeAdapterConfigOptions = {
-    strictMode?: boolean;
-    adapterType?: string | null;
-    actor?: { userId?: string | null; agentId?: string | null };
-  };
-
-  async function getById(id: string, source: Pick<Db | DbTransaction, "select"> = db) {
-    return source
       .select()
       .from(companySecrets)
       .where(eq(companySecrets.id, id))
@@ -1897,10 +1883,6 @@ export function secretService(db: Db) {
 
     checkProviders: () => checkSecretProviders(),
 
-    getById,
-    getByName,
-
-    create: async (
     previewProviderConfigDiscovery: async (
       companyId: string,
       input: {
@@ -2933,8 +2915,6 @@ export function secretService(db: Db) {
 
     getById,
     getByName,
-    resolveSecretValue,
-    resolveSecretValueForEphemeralAccess,
 
     create: async (
       companyId: string,
@@ -3703,9 +3683,6 @@ export function secretService(db: Db) {
     },
 
     resolveEnvBindings: async (companyId: string, envValue: unknown): Promise<{ env: Record<string, string>; secretKeys: Set<string> }> => {
-    resolveEnvBindings: async (
-      context?: Omit<SecretConsumerContext, "configPath">,
-    ): Promise<{ env: Record<string, string>; secretKeys: Set<string>; manifest: RuntimeSecretManifestEntry[] }> => {
       const record = asRecord(envValue);
       if (!record) return { env: {} as Record<string, string>, secretKeys: new Set<string>(), manifest: [] };
       const resolved: Record<string, string> = {};

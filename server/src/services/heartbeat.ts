@@ -11276,9 +11276,6 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             status: issueRef.status,
             priority: issueRef.priority,
             workMode: issueRef.workMode ?? "default",
-            workMode: issueRef.workMode,
-            projectId: issueRef.projectId,
-            executionPolicy: issueContext?.executionPolicy ?? null,
           }
         : null,
       exposeLowTrustRaw,

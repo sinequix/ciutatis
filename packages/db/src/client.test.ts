@@ -93,36 +93,6 @@ if (!embeddedPostgresSupport.supported) {
 // board-auth, worktree-merge-history, company-skills features.
 // Migration replay safety is an upstream concern; Ciutatis starts fresh with a reduced schema.
 describeEmbeddedPostgres.skip("applyPendingMigrations", () => {
-describeEmbeddedPostgres("applyPendingMigrations", () => {
-  it("rejects unallowlisted migration backfills that bump updated_at on user-visible tables", async () => {
-    const entries = await fs.promises.readdir(new URL("./migrations", import.meta.url), {
-      withFileTypes: true,
-    });
-    const violations: string[] = [];
-
-    for (const entry of entries) {
-      if (!entry.isFile() || !entry.name.endsWith(".sql")) continue;
-      const content = await fs.promises.readFile(
-        new URL(`./migrations/${entry.name}`, import.meta.url),
-        "utf8",
-      );
-      violations.push(...findUserVisibleUpdatedAtBackfillViolations(entry.name, content));
-    }
-
-    expect(violations).toEqual([]);
-    expect(
-      findUserVisibleUpdatedAtBackfillViolations(
-        "9999_bad_backfill.sql",
-        `
-          UPDATE "issues" AS i
-          SET "responsible_user_id" = 'owner-user',
-              "updated_at" = now()
-          WHERE i."responsible_user_id" IS NULL;
-        `,
-      ),
-    ).toEqual(['9999_bad_backfill.sql: UPDATE "issues" sets updated_at']);
-  });
-
   it(
     "applies an inserted earlier migration without replaying later legacy migrations",
     async () => {

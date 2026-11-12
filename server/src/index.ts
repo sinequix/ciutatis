@@ -54,6 +54,7 @@ import {
   parseAdapterRegistryEnv,
   reconcileAdapterAvailability,
 } from "./services/adapter-registry-bootstrap.js";
+import { createFeedbackTraceShareClientFromConfig } from "./services/feedback-share-client.js";
 import { buildRuntimeApiCandidateUrls, choosePrimaryRuntimeApiUrl } from "./runtime-api.js";
 import { createPluginWorkerManager } from "./services/plugin-worker-manager.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
@@ -809,13 +810,6 @@ export async function startServer(): Promise<StartedServer> {
 
   if (config.heartbeatSchedulerEnabled) {
     const heartbeat = heartbeatService(db as any, { pluginWorkerManager });
-  
-    // Reap orphaned running runs at startup while in-memory execution state is empty,
-    // then resume any persisted queued runs that were waiting on the previous process.
-    void heartbeat
-      .reapOrphanedRuns()
-      .then(() => heartbeat.promoteDueScheduledRetries())
-      .then(async (promotion) => {
     drainHeartbeatRunsForShutdown = heartbeat.drainRunningRunsForShutdown;
     const environmentCustomImages = environmentCustomImageService(db as any, { pluginWorkerManager });
     const routines = routineService(db as any, { pluginWorkerManager });
@@ -914,44 +908,6 @@ export async function startServer(): Promise<StartedServer> {
       await startupHeartbeatRecovery;
     }
 
-      // Periodically reap orphaned runs (5-min staleness threshold) and make sure
-      // persisted queued work is still being driven forward.
-      void heartbeat
-        .reapOrphanedRuns({ staleThresholdMs: 5 * 60 * 1000 })
-        .then(() => heartbeat.promoteDueScheduledRetries())
-        .then(async (promotion) => {
-          await heartbeat.resumeQueuedRuns();
-          const reconciled = await heartbeat.reconcileStrandedAssignedIssues();
-          if (
-            promotion.promoted > 0 ||
-            reconciled.assignmentDispatched > 0 ||
-            reconciled.dispatchRequeued > 0 ||
-            reconciled.continuationRequeued > 0 ||
-            reconciled.successfulRunHandoffEscalated > 0 ||
-            reconciled.escalated > 0
-          ) {
-            logger.warn(
-              { promotedScheduledRetries: promotion.promoted, promotedScheduledRetryRunIds: promotion.runIds, ...reconciled },
-              "periodic heartbeat recovery changed assigned issue state",
-            );
-          }
-        })
-        .then(async () => {
-          const reconciled = await heartbeat.reconcileIssueGraphLiveness();
-          if (reconciled.escalationsCreated > 0) {
-            logger.warn({ ...reconciled }, "periodic issue-graph liveness reconciliation created escalations");
-          }
-        })
-        .then(async () => {
-          const scanned = await heartbeat.scanSilentActiveRuns();
-          if (scanned.created > 0 || scanned.escalated > 0) {
-            logger.warn({ ...scanned }, "periodic active-run output watchdog created review work");
-          }
-        })
-        .then(async () => {
-          const reviewed = await heartbeat.reconcileProductivityReviews();
-          if (reviewed.created > 0 || reviewed.updated > 0 || reviewed.failed > 0) {
-            logger.warn({ ...reviewed }, "periodic productivity reconciliation created or updated review work");
     const setupCleanup = await environmentCustomImages.cleanupExpiredSetupSessions();
     if (setupCleanup.timedOut > 0 || setupCleanup.failed > 0) {
       logger.warn({ ...setupCleanup }, "startup environment customImage setup cleanup changed sessions");
@@ -990,6 +946,8 @@ export async function startServer(): Promise<StartedServer> {
         .then((result) => {
           if (result.triggered > 0) {
             logger.info({ ...result }, "routine scheduler tick enqueued runs");
+          }
+        })
         .catch((err) => {
           logger.error({ err }, "routine scheduler tick failed");
         }));
@@ -1156,6 +1114,10 @@ export async function startServer(): Promise<StartedServer> {
       }
       await waitForHeartbeatSchedulerIdle();
 
+      const telemetryClient = getTelemetryClient();
+      if (telemetryClient) {
+        telemetryClient.stop();
+        await telemetryClient.flush();
       }
 
       if (drainHeartbeatRunsForShutdown) {

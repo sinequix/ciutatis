@@ -88,16 +88,6 @@ export function AgentProperties({ agent, runtimeState }: AgentPropertiesProps) {
         {runtimeState?.lastError && (
           <PropertyRow label="Last error">
             <span className="text-xs text-red-600 dark:text-red-400 truncate max-w-[160px]">{runtimeState.lastError}</span>
-          <PropertyRow label={lastErrorIsActive ? "Last error" : "Last run error"}>
-            <span
-              className={
-                lastErrorIsActive
-                  ? "text-xs text-red-600 dark:text-red-400 break-words min-w-0"
-                  : "text-xs text-muted-foreground break-words min-w-0"
-              }
-            >
-              {runtimeState.lastError}
-            </span>
           </PropertyRow>
         )}
         {agent.lastHeartbeatAt && (

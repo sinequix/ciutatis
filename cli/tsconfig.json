@@ -9,5 +9,4 @@
     "src/__tests__",
     "src/commands/worktree.ts"
   ]
-  "include": ["src", "../packages/shared/src", "../packages/plugins/create-paperclip-plugin/src"]
 }

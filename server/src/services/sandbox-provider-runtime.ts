@@ -339,8 +339,6 @@ export async function acquireSandboxProviderLease(input: {
 }): Promise<SandboxLeaseHandle> {
   const provider = requireSandboxProvider(input.config.provider!);
   if (input.config.reuseLease && input.reusableProviderLeaseId) {
-  const provider = requireSandboxProvider(input.config.provider);
-  if (provider.supportsReusableLeases && input.config.reuseLease && input.reusableProviderLeaseId) {
     const resumedLease = await provider.resumeLease({
       config: input.config,
       providerLeaseId: input.reusableProviderLeaseId,

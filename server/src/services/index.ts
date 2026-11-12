@@ -1,6 +1,4 @@
 export { companyService } from "./institutionService.js";
-export { companyService } from "./companies.js";
-export { companyArtifactsService } from "./company-artifacts.js";
 export { companySearchService } from "./company-search.js";
 // REMOVED: export { feedbackService } from "./feedback.js";
 // REMOVED: export { companySkillService } from "./company-skills.js";
@@ -86,26 +84,13 @@ export { classifyIssueGraphLiveness, type IssueLivenessFinding } from "./recover
 export { dashboardService } from "./dashboard.js";
 export { sidebarBadgeService } from "./sidebar-badges.js";
 export { sidebarPreferenceService } from "./sidebar-preferences.js";
+// REMOVED: export { inboxDismissalService } from "./inbox-dismissals.js";
 export { accessService } from "./access.js";
+// REMOVED: export { boardAuthService } from "./board-auth.js";
 // Stub exports for upstream compatibility - these services are upstream-only
+export { boardAuthService } from "./board-auth.js";
 export { instanceSettingsService } from "./instance-settings.js";
 // REMOVED: export { companyPortabilityService } from "./company-portability.js";
-export { resourceMembershipService, type ResourceMembershipPolicyHook } from "./resource-memberships.js";
-export {
-  backfillPrincipalAccessCompatibility,
-  ensureHumanRoleDefaultGrants,
-  insertMissingPrincipalGrants,
-  type PrincipalAccessCompatibilityBackfillStats,
-} from "./principal-access-compatibility.js";
-export { authorizationService } from "./authorization.js";
-export type {
-  AuthorizationAction,
-  AuthorizationActor,
-  AuthorizationDecision,
-  AuthorizationResource,
-} from "./authorization.js";
-export { bootstrapExecutionPolicyFromEnv } from "./execution-policy-bootstrap.js";
-export { cloudUpstreamService, reconcileCloudUpstreamRunsOnStartup } from "./cloud-upstreams.js";
 export { companyPortabilityService } from "./company-portability.js";
 export { teamsCatalogService } from "./teams-catalog.js";
 export { environmentService } from "./environments.js";

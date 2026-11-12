@@ -334,7 +334,6 @@ export function CommandPalette() {
           >
             <SquarePen className="mr-2 h-4 w-4" />
             Create new request
-            Create new task
             <span className="ml-auto text-xs text-muted-foreground">C</span>
           </CommandItem>
           {onIssueDetail && fileViewerEnabled && (
@@ -378,7 +377,6 @@ export function CommandPalette() {
           <CommandItem onSelect={() => go("/requests")}>
             <CircleDot className="mr-2 h-4 w-4" />
             Requests
-            Tasks
           </CommandItem>
           <CommandItem onSelect={() => go("/projects")}>
             <Hexagon className="mr-2 h-4 w-4" />
@@ -407,8 +405,6 @@ export function CommandPalette() {
             <CommandSeparator />
             <CommandGroup heading="Requests">
               {visibleIssues.slice(0, 10).map((issue) => (
-            <CommandGroup heading="Tasks">
-              {visibleIssues.slice(0, taskLimit).map((issue) => (
                 <CommandItem
                   key={issue.id}
                   value={
