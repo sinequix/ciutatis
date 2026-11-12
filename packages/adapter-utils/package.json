@@ -14,6 +14,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./portable": "./src/portable.ts",
     "./*": "./src/*.ts"
   },
   "publishConfig": {
@@ -22,6 +23,10 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
+      },
+      "./portable": {
+        "types": "./dist/portable.d.ts",
+        "import": "./dist/portable.js"
       },
       "./*": {
         "types": "./dist/*.d.ts",

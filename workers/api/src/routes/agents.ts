@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, and, desc, inArray, sql } from "drizzle-orm";
 import { models as cloudflareWorkersAiModels } from "@ciutatis/adapter-cloudflare-workers-ai";
-import { testEnvironment as testCloudflareWorkersAiEnvironment } from "@ciutatis/adapter-cloudflare-workers-ai/server";
+import { testEnvironment as testCloudflareWorkersAiEnvironment } from "@ciutatis/adapter-cloudflare-workers-ai/workers";
 import {
   agents,
   companies,
