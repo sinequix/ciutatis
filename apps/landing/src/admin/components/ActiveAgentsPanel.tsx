@@ -2,8 +2,6 @@ import { useMemo } from "react";
 import { Link } from "@/lib/router";
 import { useQuery } from "@tanstack/react-query";
 import type { Issue } from "@paperclipai/shared";
-import { useQueries, useQuery } from "@tanstack/react-query";
-import type { Issue, IssueRecoveryAction } from "@paperclipai/shared";
 import { heartbeatsApi, type LiveRunForIssue } from "../api/heartbeats";
 import { issuesApi } from "../api/issues";
 import type { TranscriptEntry } from "../adapters";
@@ -80,18 +78,6 @@ export function ActiveAgentsPanel({
       minCount: minRunCount,
       limit: fetchLimit,
     }),
-  const liveRunsQueryKey = [...queryKeys.liveRuns(companyId), queryScope, { minRunCount, fetchLimit }] as const;
-  const sharedLiveRuns = useSharedPollingQuery({
-    companyId,
-    resourceKey: `live-runs:${queryScope}:${minRunCount}:${fetchLimit ?? "default"}`,
-    queryKey: liveRunsQueryKey,
-    enabled: !!companyId,
-    leaderOnly: true,
-  });
-  const { data: liveRuns, dataUpdatedAt: liveRunsUpdatedAt } = useQuery({
-    queryKey: liveRunsQueryKey,
-    queryFn: () => heartbeatsApi.liveRunsForCompany(companyId, { minCount: minRunCount, limit: fetchLimit }),
-    enabled: sharedLiveRuns.enabled,
   });
   usePublishSharedQueryData(sharedLiveRuns, liveRuns, liveRunsUpdatedAt);
 

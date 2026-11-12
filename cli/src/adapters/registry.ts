@@ -7,37 +7,6 @@ import { httpCLIAdapter } from "./http/index.js";
 const cloudflareWorkersAiCLIAdapter: CLIAdapterModule = {
   type: "cloudflare_workers_ai",
   formatStdoutEvent: printCloudflareWorkersAiStreamEvent,
-import { printClaudeStreamEvent } from "@paperclipai/adapter-claude-local/cli";
-import { printCodexStreamEvent } from "@paperclipai/adapter-codex-local/cli";
-import { printCursorStreamEvent } from "@paperclipai/adapter-cursor-local/cli";
-import { printCursorCloudEvent } from "@paperclipai/adapter-cursor-cloud/cli";
-import { printGrokStreamEvent } from "@paperclipai/adapter-grok-local/cli";
-import { formatStdoutEvent as printHermesGatewayStreamEvent } from "@paperclipai/hermes-paperclip-adapter/gateway/cli";
-import { printHermesStreamEvent } from "@paperclipai/hermes-paperclip-adapter/cli";
-import { printOpenCodeStreamEvent } from "@paperclipai/adapter-opencode-local/cli";
-import { printPiStreamEvent } from "@paperclipai/adapter-pi-local/cli";
-import { printOpenClawGatewayStreamEvent } from "@paperclipai/adapter-openclaw-gateway/cli";
-
-const claudeLocalCLIAdapter: CLIAdapterModule = {
-  type: "claude_local",
-  formatStdoutEvent: printClaudeStreamEvent,
-};
-
-const codexLocalCLIAdapter: CLIAdapterModule = {
-  type: "codex_local",
-  formatStdoutEvent: printCodexStreamEvent,
-
-const openCodeLocalCLIAdapter: CLIAdapterModule = {
-  type: "opencode_local",
-  formatStdoutEvent: printOpenCodeStreamEvent,
-
-const piLocalCLIAdapter: CLIAdapterModule = {
-  type: "pi_local",
-  formatStdoutEvent: printPiStreamEvent,
-
-const cursorLocalCLIAdapter: CLIAdapterModule = {
-  type: "cursor",
-  formatStdoutEvent: printCursorStreamEvent,
 };
 
 const cursorCloudCLIAdapter: CLIAdapterModule = {
@@ -54,36 +23,6 @@ const adaptersByType = new Map<string, CLIAdapterModule>(
   [
     cloudflareWorkersAiCLIAdapter,
     geminiLocalCLIAdapter,
-const grokLocalCLIAdapter: CLIAdapterModule = {
-  type: "grok_local",
-  formatStdoutEvent: printGrokStreamEvent,
-};
-
-const hermesGatewayCLIAdapter: CLIAdapterModule = {
-  type: "hermes_gateway",
-  formatStdoutEvent: printHermesGatewayStreamEvent,
-};
-
-const hermesLocalCLIAdapter: CLIAdapterModule = {
-  type: "hermes_local",
-  formatStdoutEvent: printHermesStreamEvent,
-};
-
-const openclawGatewayCLIAdapter: CLIAdapterModule = {
-  type: "openclaw_gateway",
-  formatStdoutEvent: printOpenClawGatewayStreamEvent,
-};
-
-    claudeLocalCLIAdapter,
-    codexLocalCLIAdapter,
-    openCodeLocalCLIAdapter,
-    piLocalCLIAdapter,
-    cursorLocalCLIAdapter,
-    cursorCloudCLIAdapter,
-    grokLocalCLIAdapter,
-    hermesGatewayCLIAdapter,
-    hermesLocalCLIAdapter,
-    openclawGatewayCLIAdapter,
     processCLIAdapter,
     httpCLIAdapter,
   ].map((a) => [a.type, a]),

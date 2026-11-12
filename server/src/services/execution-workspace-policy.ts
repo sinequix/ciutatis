@@ -208,18 +208,15 @@ export type ExecutionWorkspaceEnvironmentResolution = {
 
 export function resolveExecutionWorkspaceEnvironmentId(input: {
   agentDefaultEnvironmentId: string | null;
-  instanceDefaultEnvironmentId: string | null;
-  localDefaultEnvironmentId: string;
-}): ExecutionWorkspaceEnvironmentResolution {
-  if (input.agentDefaultEnvironmentId) {
-    return {
-      environmentId: input.agentDefaultEnvironmentId,
-      source: "agent",
-    };
+  defaultEnvironmentId: string;
+}) {
+  if (input.workspaceConfig?.environmentId !== undefined) {
+    return input.workspaceConfig.environmentId ?? input.defaultEnvironmentId;
   }
   const issueSettingsEnvId = (input.issueSettings as { environmentId?: string | null } | null)?.environmentId;
   if (issueSettingsEnvId !== undefined) {
     return issueSettingsEnvId ?? input.defaultEnvironmentId;
+  }
   if (input.instanceDefaultEnvironmentId) {
     return {
       environmentId: input.instanceDefaultEnvironmentId,

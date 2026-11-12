@@ -190,20 +190,6 @@ export interface PluginDiscoveryResult {
 }
 
 function getDeclaredPageRoutePaths(manifest: CiutatisPluginManifestV1): string[] {
-type PluginEntrypointKey = "manifest" | "worker" | "ui";
-
-type PluginEntrypointPath = {
-  key: PluginEntrypointKey;
-  absolutePath: string;
-};
-
-type LocalPluginBuildCommand = {
-  file: string;
-  args: string[];
-  cwd: string;
-};
-
-function getDeclaredPageRoutePaths(manifest: PaperclipPluginManifestV1): string[] {
   return (manifest.ui?.slots ?? [])
     .filter((slot): slot is PluginUiSlotDeclaration => slot.type === "page" && typeof slot.routePath === "string" && slot.routePath.length > 0)
     .map((slot) => slot.routePath!);
@@ -1215,7 +1201,6 @@ export function pluginLoader(
         : "";
       throw new Error(
         `Package ${resolvedPackageName} at ${resolvedPackagePath} does not appear to be a Ciutatis plugin (no manifest found).`,
-        `Package ${resolvedPackageName} at ${resolvedPackagePath} does not appear to be a Paperclip plugin (no manifest found).${manualBuildHint}`,
       );
     }
 

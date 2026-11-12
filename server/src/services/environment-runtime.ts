@@ -680,7 +680,6 @@ function createSandboxEnvironmentDriver(
   }): Promise<Record<string, unknown>> {
     const metadataConfig = sandboxConfigFromLeaseMetadataLoose({ metadata: input.lease.metadata ?? null });
     if (metadataConfig && metadataConfig.provider === input.provider) {
-      const parsed = await resolveEnvironmentDriverConfigForRuntime(db, input.lease.companyId!, {
       const parsed = await resolveEnvironmentDriverConfigForRuntime(db, input.lease.companyId, {
         id: input.environment.id,
         driver: "sandbox",
@@ -853,19 +852,6 @@ function createSandboxEnvironmentDriver(
           ? reusableExistingLeases.find((lease) => lease.providerLeaseId === reusableProviderLeaseId)
           : null;
 
-        const providerLease = reusableLease?.providerLeaseId
-          ? await pluginWorkerManager.call(
-              pluginProvider.resolved.plugin.id,
-              "environmentResumeLease",
-              {
-                driverKey: parsed.config.provider!,
-                companyId: input.companyId,
-                environmentId: input.environment.id,
-                config: workerConfig,
-                providerLeaseId: reusableLease.providerLeaseId!,
-                leaseMetadata: reusableLease.metadata ?? undefined,
-              },
-            ).then((resumed) =>
         let providerLease: PluginEnvironmentLease | null = null;
         if (reusableLease?.providerLeaseId) {
           try {
@@ -968,10 +954,6 @@ function createSandboxEnvironmentDriver(
             pluginKey: pluginProvider.resolved.plugin.pluginKey,
             sandboxProviderPlugin: true,
             ...sandboxConfigForLeaseMetadata(storedConfig),
-            ...stripSecretRefValuesFromPluginLeaseMetadata({
-              metadata: acquiredLease.metadata,
-              schema: pluginProvider.resolved.driver?.configSchema as Record<string, unknown> | null | undefined,
-            }),
             ...sanitizedProviderMetadata,
             ...(reusableScope ? { reusableSandboxLease: reusableScope } : {}),
           },
@@ -1149,7 +1131,6 @@ function createSandboxEnvironmentDriver(
         throw new Error(`Lease "${input.lease.id}" is missing companyId.`);
       }
       const parsed = metadataConfig
-        ? await resolveEnvironmentDriverConfigForRuntime(db, companyId, {
         ? await resolveEnvironmentDriverConfigForRuntime(db, input.lease.companyId, {
             id: input.environment.id,
             driver: "sandbox",
@@ -1524,7 +1505,6 @@ function createPluginEnvironmentDriver(
         driverKey: parsed.config.driverKey as string,
         companyId: input.companyId,
         environmentId: input.environment.id,
-        config: parsed.config.driverConfig as Record<string, unknown>,
         issueId: input.issueId,
         config: parsed.config.driverConfig,
         runId: input.heartbeatRunId ?? randomUUID(),
@@ -1562,8 +1542,6 @@ function createPluginEnvironmentDriver(
         driverKey: driverKey as string,
         companyId: input.lease.companyId as string,
         environmentId: input.environment.id,
-        config: driverConfig as Record<string, unknown>,
-        providerLeaseId: input.lease.providerLeaseId as string | null,
         issueId: input.lease.issueId,
         config: driverConfig,
         providerLeaseId: input.lease.providerLeaseId,
@@ -1811,27 +1789,6 @@ export function environmentRuntimeService(
         const environment = await environmentsSvc.getById(leaseRow.environmentId);
         if (!environment) continue;
 
-        const leaseSnapshot: EnvironmentLease = {
-          id: leaseRow.id,
-          companyId: leaseRow.companyId,
-          environmentId: leaseRow.environmentId,
-          executionWorkspaceId: leaseRow.executionWorkspaceId ?? null,
-          issueId: leaseRow.issueId ?? null,
-          heartbeatRunId: leaseRow.heartbeatRunId ?? null,
-          status: leaseRow.status as EnvironmentLease["status"],
-          leasePolicy: leaseRow.leasePolicy as EnvironmentLease["leasePolicy"],
-          provider: leaseRow.provider ?? null,
-          providerLeaseId: leaseRow.providerLeaseId ?? null,
-          acquiredAt: leaseRow.acquiredAt?.toISOString() ?? null,
-          lastUsedAt: leaseRow.lastUsedAt?.toISOString() ?? null,
-          expiresAt: leaseRow.expiresAt?.toISOString() ?? null,
-          releasedAt: leaseRow.releasedAt?.toISOString() ?? null,
-          failureReason: leaseRow.failureReason ?? null,
-          cleanupStatus: leaseRow.cleanupStatus as EnvironmentLease["cleanupStatus"],
-          metadata: (leaseRow.metadata as Record<string, unknown> | null) ?? null,
-          createdAt: leaseRow.createdAt.toISOString(),
-          updatedAt: leaseRow.updatedAt.toISOString(),
-        };
         const leaseSnapshot = toEnvironmentLeaseSnapshot(leaseRow);
         const driver = getDriver(getLeaseDriverKey(leaseSnapshot, environment));
         const lease = driver

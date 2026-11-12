@@ -317,70 +317,13 @@ export function OpenClawGatewayConfigFields({
                   "paperclipApiUrl",
                   String(config.paperclipApiUrl ?? ""),
                 )
-      <Field label="Paperclip API URL override">
-        <DraftInput
-          value={
-            isCreate
-              ? values!.paperclipApiUrl ?? ""
-              : eff("adapterConfig", "paperclipApiUrl", String(config.paperclipApiUrl ?? ""))
-          }
-          onCommit={(v) =>
-            isCreate
-              ? set!({ paperclipApiUrl: v })
-              : mark("adapterConfig", "paperclipApiUrl", v || undefined)
-          }
-          immediate
-          className={inputClass}
-          placeholder="https://paperclip.example"
-        />
-      </Field>
-
-      <Field label="Timeout (seconds)">
-        <DraftInput
-          value={
-            isCreate
-              ? values!.timeoutSec != null ? String(values!.timeoutSec) : ""
-              : eff("adapterConfig", "timeoutSec", String(config.timeoutSec ?? ""))
-          }
-          onCommit={(v) => {
-            const parsed = Number.parseInt(v.trim(), 10);
-            const val = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-            if (isCreate) {
-              set!({ timeoutSec: val });
-            } else {
-              mark("adapterConfig", "timeoutSec", val);
-            }
-          }}
-          immediate
-          className={inputClass}
-          placeholder="120"
-        />
-      </Field>
-
-      <Field label="Headers JSON">
-        <HeadersJsonTextarea
-          isCreate={isCreate}
-          createDraft={isCreate ? values!.headersJson ?? "" : ""}
-          onCreateDraftChange={(next) => set!({ headersJson: next })}
-          editStringified={JSON.stringify(eff("adapterConfig", "headers", config.headers ?? {}), null, 2)}
-          onEditCommit={(next) => {
-            const trimmed = next.trim();
-            if (!trimmed) {
-              mark("adapterConfig", "headers", undefined);
-              return;
-            }
-            try {
-              const parsed = JSON.parse(trimmed);
-              if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-                mark("adapterConfig", "headers", parsed);
               }
-            } catch {
-              // Keep local draft until JSON is valid
-            }
-          }}
-          inputClass={inputClass}
-        />
-      </Field>
+              onCommit={(v) => mark("adapterConfig", "paperclipApiUrl", v || undefined)}
+              immediate
+              className={inputClass}
+              placeholder="https://paperclip.example"
+            />
+          </Field>
 
           <Field label="Session strategy">
             <select
@@ -463,15 +406,6 @@ export function OpenClawGatewayConfigFields({
             </div>
           </Field>
         </>
-      {!isCreate && (
-        <Field label="Claimed API key path">
-          <DraftInput
-            value={eff("adapterConfig", "claimedApiKeyPath", String(config.claimedApiKeyPath ?? ""))}
-            onCommit={(v) => mark("adapterConfig", "claimedApiKeyPath", v || undefined)}
-            immediate
-            className={inputClass}
-            placeholder="~/.openclaw/workspace/paperclip-claimed-api-key.json"
-        </Field>
       )}
 
       <Field label="Wait timeout (ms)">

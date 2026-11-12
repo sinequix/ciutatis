@@ -18,8 +18,6 @@ import { AlertCircle, Archive, ArchiveRestore, Check, ExternalLink, Github, Load
 import { ChoosePathButton } from "./PathInstructionsModal";
 import { DraftInput } from "./agent-config-primitives";
 import { InlineEditor } from "./InlineEditor";
-import { EnvironmentVariablesEditor } from "./environment-variables-editor";
-import { Badge } from "@/components/ui/badge";
 
 const PROJECT_STATUSES = [
   { value: "backlog", label: "Backlog" },
@@ -244,36 +242,6 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
   const { data: experimentalSettings } = useQuery({
     queryKey: queryKeys.instance.experimentalSettings,
     queryFn: () => instanceSettingsApi.getExperimental(),
-    retry: false,
-  });
-  const environmentsEnabled = experimentalSettings?.enableEnvironments === true;
-  const { data: availableSecrets = [] } = useQuery({
-    queryKey: selectedCompanyId ? queryKeys.secrets.list(selectedCompanyId) : ["secrets", "none"],
-    queryFn: () => secretsApi.list(selectedCompanyId!),
-    enabled: Boolean(selectedCompanyId),
-  });
-  const { data: userSecretDefinitions = [] } = useQuery({
-    queryKey: selectedCompanyId
-      ? queryKeys.secrets.userDefinitions(selectedCompanyId)
-      : ["user-secret-definitions", "none"],
-    queryFn: () => secretsApi.listUserSecretDefinitions(selectedCompanyId!),
-    enabled: Boolean(selectedCompanyId),
-    retry: false,
-  });
-  const createSecret = useMutation({
-    mutationFn: (input: { name: string; value: string }) => {
-      if (!selectedCompanyId) throw new Error("Select a company to create secrets");
-      return secretsApi.create(selectedCompanyId, input);
-    },
-    onSuccess: () => {
-      if (!selectedCompanyId) return;
-      queryClient.invalidateQueries({ queryKey: queryKeys.secrets.list(selectedCompanyId) });
-    },
-  });
-  const { data: environments } = useQuery({
-    queryKey: queryKeys.environments.list(selectedCompanyId!),
-    queryFn: () => environmentsApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId && environmentsEnabled,
   });
 
   const linkedGoalIds = project.goalIds.length > 0
@@ -305,13 +273,6 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
     branchTemplate: "",
     worktreeParentDir: "",
   };
-  const runSelectableEnvironments = (environments ?? []).filter((environment) => {
-    if (environment.driver === "local" || environment.driver === "ssh") return true;
-    if (environment.driver !== "sandbox") return false;
-    const provider = typeof environment.config?.provider === "string" ? environment.config.provider : null;
-    return provider !== null && provider !== "fake";
-  });
-  const showExecutionWorkspaceEnvironmentControl = environmentsEnabled && runSelectableEnvironments.length > 1;
 
   const invalidateProject = () => {
     queryClient.invalidateQueries({ queryKey: queryKeys.projects.detail(project.id) });
@@ -620,27 +581,6 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
             </Popover>
           )}
         </PropertyRow>
-        <PropertyRow
-          label={<FieldLabel label="Env" state={fieldState("env")} />}
-          alignStart
-          valueClassName="space-y-2"
-        >
-          <div className="space-y-2">
-            <EnvironmentVariablesEditor
-              value={project.env ?? {}}
-              secrets={availableSecrets}
-              userSecretDefinitions={userSecretDefinitions}
-              onCreateSecret={async (name, value) => {
-                const created = await createSecret.mutateAsync({ name, value });
-                return created;
-              }}
-              onChange={(env) => commitField("env", { env: env ?? null })}
-            />
-            <p className="text-(length:--text-micro) text-muted-foreground">
-              Applied to all runs for tasks in this project. Project values override agent env on key conflicts.
-            </p>
-          </div>
-        </PropertyRow>
         <PropertyRow label={<FieldLabel label="Created" state="idle" />}>
           <span className="text-sm">{formatDate(project.createdAt)}</span>
         </PropertyRow>
@@ -748,7 +688,6 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
                   </div>
                   {codebase.origin === "managed_checkout" && (
                     <div className="text-[11px] text-muted-foreground">Ciutatis-managed folder.</div>
-                    <div className="text-(length:--text-micro) text-muted-foreground">Paperclip-managed folder.</div>
                   )}
                 </div>
                 <div className="flex items-center gap-1">
@@ -781,8 +720,6 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
             {hasAdditionalLegacyWorkspaces && (
               <div className="text-[11px] text-muted-foreground">
                 Additional legacy workspace records exist on this project. Ciutatis is using the primary workspace as the codebase view.
-              <div className="text-(length:--text-micro) text-muted-foreground">
-                Additional legacy workspace records exist on this project. Paperclip is using the primary workspace as the codebase view.
               </div>
             )}
 
@@ -1032,34 +969,6 @@ export function ProjectProperties({ project, onUpdate, onFieldUpdate, getFieldSa
                         <div className="text-xs text-muted-foreground">
                           Host-managed implementation: <span className="text-foreground">Git worktree</span>
                         </div>
-                        {showExecutionWorkspaceEnvironmentControl ? (
-                          <div>
-                            <div className="mb-1 flex items-center gap-1.5">
-                              <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <span>Environment</span>
-                                <SaveIndicator state={fieldState("execution_workspace_environment")} />
-                              </label>
-                            </div>
-                            <select
-                              className="w-full rounded border border-border bg-transparent px-2 py-1 text-xs outline-none"
-                              value={executionWorkspaceEnvironmentId}
-                              onChange={(e) =>
-                                commitField(
-                                  "execution_workspace_environment",
-                                  updateExecutionWorkspacePolicy({
-                                    environmentId: e.target.value || null,
-                                  })!,
-                                )}
-                            >
-                              <option value="">No environment</option>
-                              {runSelectableEnvironments.map((environment) => (
-                                <option key={environment.id} value={environment.id}>
-                                  {environment.name} · {environment.driver}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        ) : null}
                         <div>
                           <div className="mb-1 flex items-center gap-1.5">
                             <label className="flex items-center gap-2 text-xs text-muted-foreground">

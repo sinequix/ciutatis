@@ -3938,51 +3938,6 @@ async function spawnLocalRuntimeService(input: StartLocalRuntimeServiceInput): P
       profileKind: "workspace-runtime",
       processGroupId: adoptedRecord.processGroupId ?? null,
     };
-    const adoptedUrl = adoptedRecord.url ?? url;
-    if (!(await isRuntimeServiceUrlHealthy(adoptedUrl, { serviceName, command }))) {
-      await terminateLocalService(adoptedRecord);
-      await removeLocalServiceRegistryRecord(adoptedRecord.serviceKey);
-    } else {
-      return {
-        record: {
-          id: adoptedRecord.runtimeServiceId ?? randomUUID(),
-          companyId: input.agent.companyId,
-          projectId: input.workspace.projectId,
-          projectWorkspaceId: input.workspace.workspaceId,
-          executionWorkspaceId: input.executionWorkspaceId ?? null,
-          issueId: input.issue?.id ?? null,
-          serviceName,
-          status: "running",
-          lifecycle,
-          scopeType: input.scopeType,
-          scopeId: input.scopeId,
-          reuseKey: input.reuseKey,
-          command,
-          cwd: serviceCwd,
-          port: adoptedRecord.port ?? port,
-          url: adoptedRecord.url ?? url,
-          provider: "local_process",
-          providerRef: String(adoptedRecord.pid),
-          ownerAgentId: input.agent.id ?? null,
-          startedByRunId,
-          lastUsedAt: new Date().toISOString(),
-          startedAt: adoptedRecord.startedAt,
-          stoppedAt: null,
-          stopPolicy,
-          healthStatus: "healthy",
-          reused: true,
-          db: input.db,
-          child: null,
-          leaseRunIds: leaseRunId ? new Set([leaseRunId]) : new Set(),
-          idleTimer: null,
-          envFingerprint,
-          serviceKey,
-          profileKind: "workspace-runtime",
-          processGroupId: adoptedRecord.processGroupId ?? null,
-        },
-        readiness: Promise.resolve(),
-      };
-    }
   }
   if (identityPort) {
       const ownerPid = await readLocalServicePortOwner(identityPort);
@@ -4739,32 +4694,6 @@ export async function reconcilePersistedRuntimeServicesOnStartup(db: Db) {
       profileKind: "workspace-runtime",
     });
     if (adoptedRecord?.serviceKey) {
-    if (!adoptedRecord && row.command && row.cwd) {
-      adoptedRecord = await findAdoptableLocalService({
-        serviceKey: createLocalServiceKey({
-          profileKind: "workspace-runtime",
-          serviceName: row.serviceName,
-          cwd: row.cwd,
-          command: row.command,
-          envFingerprint: row.reuseKey ?? "",
-          port: null,
-          scope: {
-            scopeType: row.scopeType as RuntimeServiceRecord["scopeType"],
-            scopeId: row.scopeId ?? null,
-            executionWorkspaceId: row.executionWorkspaceId ?? null,
-            reuseKey: row.reuseKey ?? null,
-          },
-        }),
-        profileKind: "workspace-runtime",
-        serviceName: row.serviceName,
-        command: row.command,
-        cwd: row.cwd,
-        envFingerprint: row.reuseKey ?? "",
-        port: row.port ?? null,
-        url: row.url ?? null,
-      });
-    }
-    if (adoptedRecord) {
       const adoptedUrl = adoptedRecord.url ?? row.url ?? null;
       if (!(await isRuntimeServiceUrlHealthy(adoptedUrl, { serviceName: row.serviceName, command: row.command }))) {
         await removeLocalServiceRegistryRecord(adoptedRecord.serviceKey);
