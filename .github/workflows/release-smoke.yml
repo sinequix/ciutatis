@@ -37,8 +37,10 @@ on:
 
 jobs:
   smoke:
-    runs-on: [self-hosted, Linux, X64, ian-hetzner]
+    runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
