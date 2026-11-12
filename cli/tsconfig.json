@@ -2,11 +2,7 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": ".."
   },
-  "include": ["src"],
-  "exclude": [
-    "src/__tests__",
-    "src/commands/worktree.ts"
-  ]
+  "include": ["src", "../packages/shared/src", "../packages/plugins/create-paperclip-plugin/src"]
 }

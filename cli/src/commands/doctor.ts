@@ -1,6 +1,6 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
-import type { CiutatisConfig } from "../config/schema.js";
+import type { PaperclipConfig } from "../config/schema.js";
 import { readConfig, resolveConfigPath } from "../config/store.js";
 import {
   agentJwtSecretCheck,
@@ -14,8 +14,8 @@ import {
   storageCheck,
   type CheckResult,
 } from "../checks/index.js";
-import { loadCiutatisEnvFile } from "../config/env.js";
-import { printCiutatisCliBanner } from "../utils/banner.js";
+import { loadPaperclipEnvFile } from "../config/env.js";
+import { printPaperclipCliBanner } from "../utils/banner.js";
 
 const STATUS_ICON = {
   pass: pc.green("✓"),
@@ -28,11 +28,11 @@ export async function doctor(opts: {
   repair?: boolean;
   yes?: boolean;
 }): Promise<{ passed: number; warned: number; failed: number }> {
-  printCiutatisCliBanner();
-  p.intro(pc.bgCyan(pc.black(" ciutatis doctor ")));
+  printPaperclipCliBanner();
+  p.intro(pc.bgCyan(pc.black(" paperclip doctor ")));
 
   const configPath = resolveConfigPath(opts.config);
-  loadCiutatisEnvFile(configPath);
+  loadPaperclipEnvFile(configPath);
   const results: CheckResult[] = [];
 
   // 1. Config check (must pass before others)
@@ -44,7 +44,7 @@ export async function doctor(opts: {
     return printSummary(results);
   }
 
-  let config: CiutatisConfig;
+  let config: PaperclipConfig;
   try {
     config = readConfig(opts.config)!;
   } catch (err) {
@@ -53,7 +53,7 @@ export async function doctor(opts: {
       status: "fail",
       message: `Could not read config: ${err instanceof Error ? err.message : String(err)}`,
       canRepair: false,
-      repairHint: "Run `ciutatis configure --section database` or `ciutatis onboard`",
+      repairHint: "Run `paperclipai configure --section database` or `paperclipai onboard`",
     };
     results.push(readResult);
     printResult(readResult);
@@ -173,7 +173,7 @@ async function runRepairableCheck(input: {
   if (!repaired) return result;
 
   // Repairs may create/update the adjacent .env file or other local resources.
-  loadCiutatisEnvFile(input.configPath);
+  loadPaperclipEnvFile(input.configPath);
   result = await input.run();
   printResult(result);
   return result;
