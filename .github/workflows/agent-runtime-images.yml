@@ -19,7 +19,7 @@ env:
 
 jobs:
   build-and-sign:
-    runs-on: [self-hosted, Linux, X64, ian-hetzner]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
