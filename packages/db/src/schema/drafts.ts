@@ -1,5 +1,5 @@
 import { pgEnum, pgTable, uuid, text, timestamp, jsonb, index } from "drizzle-orm/pg-core";
-import { institutions } from "./institutions.js";
+import { companies } from "./companies.js";
 
 export const emailDraftStatus = pgEnum("email_draft_status", ["draft", "sent", "scheduled"]);
 
@@ -7,7 +7,7 @@ export const emailDrafts = pgTable(
   "email_drafts",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    companyId: uuid("company_id").notNull().references(() => institutions.id),
+    companyId: uuid("company_id").notNull().references(() => companies.id),
     userId: uuid("user_id").notNull(),
     subject: text("subject").notNull(),
     contentHtml: text("content_html"),

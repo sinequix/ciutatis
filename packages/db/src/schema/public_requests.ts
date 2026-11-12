@@ -1,13 +1,13 @@
 import { pgTable, uuid, text, timestamp, boolean, index, uniqueIndex } from "drizzle-orm/pg-core";
-import { institutions } from "./institutions.js";
-import { requests } from "./requests.js";
+import { companies } from "./companies.js";
+import { issues } from "./issues.js";
 
 export const publicRequests = pgTable(
   "public_requests",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    issueId: uuid("issue_id").notNull().references(() => requests.id, { onDelete: "cascade" }),
-    companyId: uuid("company_id").notNull().references(() => institutions.id, { onDelete: "cascade" }),
+    issueId: uuid("issue_id").notNull().references(() => issues.id, { onDelete: "cascade" }),
+    companyId: uuid("company_id").notNull().references(() => companies.id, { onDelete: "cascade" }),
     publicId: text("public_id").notNull(),
     institutionSlug: text("institution_slug").notNull(),
     submissionMode: text("submission_mode").notNull(),
