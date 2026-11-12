@@ -1,6 +1,3 @@
-// Stub file for upstream authz features not in Ciutatis
-// Company member roles service
-
 import type { Request } from "express";
 import { forbidden, HttpError, unauthorized } from "../errors.js";
 import { logger } from "../middleware/logger.js";
@@ -25,43 +22,25 @@ function throwOrShadowResponsibleUserCompanyAccessDeny(
   throw new HttpError(403, message, { code });
 }
 
-export type ActorType = "system" | "agent" | "user" | "plugin";
-
-export interface ActorInfo {
-  actorType: ActorType;
-  actorId: string;
-  agentId: string | null;
-  runId?: string | null;
-}
-
-export function assertAuthenticated(req?: Request): void {
-  if (!req?.actor || req.actor.type === "none") {
+export function assertAuthenticated(req: Request) {
+  if (req.actor.type === "none") {
     throw unauthorized();
   }
 }
 
-export function assertInstanceAdmin(_req?: Request): void {
-  assertAuthenticated(_req);
-  if (_req?.actor.type === "board" && (_req.actor.source === "local_implicit" || _req.actor.isInstanceAdmin)) {
-    return;
-  }
-  throw forbidden();
-}
-
-export function assertBoard(req: Request): void {
-  assertAuthenticated(req);
+export function assertBoard(req: Request) {
   if (req.actor.type !== "board") {
     throw forbidden("Board access required");
   }
 }
 
-export function assertCompanyAccess(req: Request, companyId: string): void {
 export function hasBoardOrgAccess(req: Request) {
   if (req.actor.type !== "board") {
     return false;
   }
   if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) {
     return true;
+  }
   return Array.isArray(req.actor.companyIds) && req.actor.companyIds.length > 0;
 }
 
@@ -69,34 +48,34 @@ export function assertBoardOrgAccess(req: Request) {
   assertBoard(req);
   if (hasBoardOrgAccess(req)) {
     return;
+  }
   throw forbidden("Company membership or instance admin access required");
+}
 
 export function assertBoardOrAgent(req: Request) {
   if (req.actor.type === "agent") {
+    return;
+  }
   if (req.actor.type === "board") {
     assertBoardOrgAccess(req);
+    return;
+  }
   throw forbidden("Board or agent access required");
+}
 
 export function assertInstanceAdmin(req: Request) {
+  assertBoard(req);
+  if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) {
+    return;
+  }
   throw forbidden("Instance admin access required");
+}
 
 export function assertCompanyAccess(req: Request, companyId: string) {
   assertAuthenticated(req);
-  if (req.actor.type === "board" && req.actor.source === "local_implicit") return;
-  if (req.actor.isInstanceAdmin) return;
-  if (req.actor.type === "board") {
-    const allowed = new Set(req.actor.companyIds ?? []);
-    if (allowed.has(companyId)) return;
-  }
-  if (req.actor.type === "agent") {
-    if (req.actor.companyId === companyId) return;
+  if (req.actor.type === "agent" && req.actor.companyId !== companyId) {
     throw forbidden("Agent key cannot access another company");
   }
-  throw forbidden();
-}
-
-export function getActorInfo(req: Request): ActorInfo {
-  if (req.actor?.type === "agent" && req.actor.agentId) {
   if (req.actor.type === "agent" && req.actor.onBehalfOfUserId?.trim()) {
     const membership = req.actor.onBehalfOfMemberships?.find(
       (item) => item.companyId === companyId && item.status === "active",
@@ -113,13 +92,21 @@ export function getActorInfo(req: Request): ActorInfo {
     const method = typeof req.method === "string" ? req.method.toUpperCase() : "GET";
     const isSafeMethod = ["GET", "HEAD", "OPTIONS"].includes(method);
     if (!isSafeMethod && membership.membershipRole === "viewer") {
+      throwOrShadowResponsibleUserCompanyAccessDeny(
+        req,
+        companyId,
         "RESPONSIBLE_USER_UNAUTHORIZED",
         "Responsible user is not authorized for write access",
+      );
+    }
   }
   if (req.actor.type === "board" && req.actor.source !== "local_implicit") {
     const allowedCompanies = req.actor.companyIds ?? [];
     if (!allowedCompanies.includes(companyId)) {
       throw forbidden("User does not have access to this company");
+    }
+    const method = typeof req.method === "string" ? req.method.toUpperCase() : "GET";
+    const isSafeMethod = ["GET", "HEAD", "OPTIONS"].includes(method);
     if (!isSafeMethod && !req.actor.isInstanceAdmin && Array.isArray(req.actor.memberships)) {
       const membership = req.actor.memberships.find((item) => item.companyId === companyId);
       if (!membership || membership.status !== "active") {
@@ -127,6 +114,10 @@ export function getActorInfo(req: Request): ActorInfo {
       }
       if (membership.membershipRole === "viewer") {
         throw forbidden("Viewer access is read-only");
+      }
+    }
+  }
+}
 
 export function getActorInfo(req: Request): (
   {
@@ -135,26 +126,22 @@ export function getActorInfo(req: Request): (
     agentId: string | null;
     runId: string | null;
     actorSource: "agent_key" | "agent_jwt";
+  }
   | {
     actorType: "user";
+    actorId: string;
     agentId: null;
+    runId: string | null;
     actorSource: "local_implicit" | "session" | "board_key" | "cloud_tenant";
+  }
 ) {
   assertAuthenticated(req);
   if (req.actor.type === "agent") {
     const actorSource = req.actor.source === "agent_jwt" ? "agent_jwt" : "agent_key";
     return {
-      actorType: "agent",
-      actorId: req.actor.agentId,
-      agentId: req.actor.agentId,
-      runId: req.actor.runId ?? null,
-    };
-  }
-  if (req.actor?.type === "board" && req.actor.userId) {
-    return {
-      actorType: "user",
-      actorId: req.actor.userId,
-      agentId: null,
+      actorType: "agent" as const,
+      actorId: req.actor.agentId ?? "unknown-agent",
+      agentId: req.actor.agentId ?? null,
       runId: req.actor.runId ?? null,
       actorSource,
     };
@@ -168,22 +155,10 @@ export function getActorInfo(req: Request): (
       : "session";
 
   return {
-    actorType: "system",
-    actorId: "board",
+    actorType: "user" as const,
+    actorId: req.actor.userId ?? "board",
     agentId: null,
     runId: req.actor.runId ?? null,
     actorSource,
   };
-}
-
-export function assertBoardOrgAccess(req: Request, orgId: string): void {
-  assertBoard(req);
-  if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) return;
-  if (orgId !== "instance") {
-    assertCompanyAccess(req, orgId);
-    return;
-  }
-  if ((req.actor.companyIds ?? []).length > 0) return;
-  if ((req.actor.memberships ?? []).some((membership) => membership.status === "active")) return;
-  throw forbidden();
 }

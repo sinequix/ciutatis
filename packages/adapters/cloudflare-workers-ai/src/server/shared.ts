@@ -1,5 +1,10 @@
-import { asNumber, asString, parseObject } from "@paperclipai/adapter-utils/server-utils";
-import type { UsageSummary } from "@paperclipai/adapter-utils";
+import { asNumber, asString, parseObject } from "@paperclipai/adapter-utils/portable";
+
+export interface UsageSummary {
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens?: number;
+}
 
 export interface CloudflareWorkersAiCredentials {
   accountId: string | null;

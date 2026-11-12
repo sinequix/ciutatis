@@ -28,11 +28,6 @@ import {
   GitBranch,
 } from "lucide-react";
 import { PROJECT_COLORS } from "@paperclipai/shared";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { cn } from "../lib/utils";
 import { MarkdownEditor, type MarkdownEditorRef } from "./MarkdownEditor";
 import { StatusBadge } from "./StatusBadge";
@@ -277,8 +272,6 @@ export function NewProjectDialog() {
             placeholder="Add description..."
             bordered={false}
             contentClassName={cn("text-sm text-muted-foreground", expanded ? "min-h-[220px]" : "min-h-[120px]")}
-            mentions={mentionOptions}
-            contentClassName={cn("text-sm text-muted-foreground", expanded ? "min-h-(--sz-220px)" : "min-h-(--sz-120px)")}
             imageUploadHandler={async (file) => {
               const asset = await uploadDescriptionImage.mutateAsync(file);
               return asset.contentPath;
@@ -348,38 +341,6 @@ export function NewProjectDialog() {
                 />
                 <ChoosePathButton />
               </div>
-        <div className="px-4 pt-3 pb-3 space-y-3 border-t border-border">
-          <div>
-            <div className="mb-1 flex items-center gap-1.5">
-              <label className="block text-xs text-muted-foreground">Repo URL</label>
-              <span className="text-xs text-muted-foreground/50">optional</span>
-              <Tooltip delayDuration={300}>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-3 w-3 text-muted-foreground/50 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-(--sz-240px) text-xs">
-                  Link a GitHub repository so agents can clone, read, and push code for this project.
-                </TooltipContent>
-              </Tooltip>
-            </div>
-            <input
-              className="w-full rounded border border-border bg-transparent px-2 py-1 text-xs outline-none"
-              value={workspaceRepoUrl}
-              onChange={(e) => { setWorkspaceRepoUrl(e.target.value); setWorkspaceError(null); }}
-              placeholder="https://github.com/org/repo"
-            />
-          <div>
-            <div className="mb-1 flex items-center gap-1.5">
-              <label className="block text-xs text-muted-foreground">Local folder</label>
-              <span className="text-xs text-muted-foreground/50">optional</span>
-              <Tooltip delayDuration={300}>
-                <TooltipTrigger asChild>
-                  <HelpCircle className="h-3 w-3 text-muted-foreground/50 cursor-help" />
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-(--sz-240px) text-xs">
-                  Set an absolute path on this machine where local agents will read and write files for this project.
-                </TooltipContent>
-              </Tooltip>
             </div>
           )}
           {(workspaceSetup === "repo" || workspaceSetup === "both") && (

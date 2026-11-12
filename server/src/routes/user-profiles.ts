@@ -13,7 +13,6 @@ import {
 import type {
   UserProfileDailyPoint,
   UserProfileIdentity,
-  UserProfileIssueSummary,
   UserProfileResponse,
   UserProfileWindowStats,
 } from "@paperclipai/shared";
@@ -411,8 +410,8 @@ export function userProfileRoutes(db: Db) {
       daily,
       recentIssues: recentIssues.map((issue) => ({
         ...issue,
-        status: issue.status as UserProfileIssueSummary["status"],
-        priority: issue.priority as UserProfileIssueSummary["priority"],
+        status: issue.status as UserProfileResponse["recentIssues"][number]["status"],
+        priority: issue.priority as UserProfileResponse["recentIssues"][number]["priority"],
       })),
       recentActivity,
       topAgents: topAgents.map((entry) => ({

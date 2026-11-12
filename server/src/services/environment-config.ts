@@ -147,7 +147,7 @@ async function getSandboxProviderConfigSchema(
     db,
     driverKey: provider,
   });
-  const schema = resolved?.driver?.configSchema;
+  const schema = resolved?.driver.configSchema;
   return schema && typeof schema === "object" && !Array.isArray(schema)
     ? schema as Record<string, unknown>
     : null;
@@ -528,7 +528,7 @@ export async function normalizeEnvironmentConfigForPersistence(input: {
         ...validated.normalizedConfig,
       },
       schema:
-        validated.driver?.configSchema && typeof validated.driver.configSchema === "object" && !Array.isArray(validated.driver.configSchema)
+        validated.driver.configSchema && typeof validated.driver.configSchema === "object" && !Array.isArray(validated.driver.configSchema)
           ? validated.driver.configSchema as Record<string, unknown>
           : null,
       actor: input.actor,
@@ -580,7 +580,6 @@ export async function resolveEnvironmentDriverConfigForRuntime(
   }
 
   if (parsed.driver === "ssh" && parsed.config.privateKeySecretRef) {
-    const secretRef = parsed.config.privateKeySecretRef as { secretId: string; version?: string | number };
     if (!companyId) {
       throw unprocessable("Runtime secret resolution requires a companyId context");
     }
@@ -590,8 +589,6 @@ export async function resolveEnvironmentDriverConfigForRuntime(
         ...parsed.config,
         privateKey: await secrets.resolveSecretValue(
           companyId,
-          secretRef.secretId,
-          secretRef.version ?? "latest",
           parsed.config.privateKeySecretRef.secretId,
           parsed.config.privateKeySecretRef.version ?? "latest",
           {
@@ -608,10 +605,6 @@ export async function resolveEnvironmentDriverConfigForRuntime(
     };
   }
 
-  if (parsed.driver === "sandbox" && parsed.config.provider && parsed.config.provider !== "fake") {
-    return {
-      driver: "sandbox",
-      config: await resolveConfigSecretRefsForRuntime({
   if (parsed.driver === "sandbox" && parsed.config.provider !== "fake") {
     const schema = await getSandboxProviderConfigSchema(db, parsed.config.provider);
     let runtimeConfig = parsed.config;

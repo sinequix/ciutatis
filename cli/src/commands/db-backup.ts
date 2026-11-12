@@ -5,10 +5,10 @@ import { formatDatabaseBackupResult, runDatabaseBackup } from "@paperclipai/db";
 import {
   expandHomePrefix,
   resolveDefaultBackupDir,
-  resolveCiutatisInstanceId,
+  resolvePaperclipInstanceId,
 } from "../config/home.js";
 import { readConfig, resolveConfigPath } from "../config/store.js";
-import { printCiutatisCliBanner } from "../utils/banner.js";
+import { printPaperclipCliBanner } from "../utils/banner.js";
 
 type DbBackupOptions = {
   config?: string;
@@ -47,13 +47,13 @@ function resolveBackupDir(raw: string): string {
 }
 
 export async function dbBackupCommand(opts: DbBackupOptions): Promise<void> {
-  printCiutatisCliBanner();
-  p.intro(pc.bgCyan(pc.black(" ciutatis db:backup ")));
+  printPaperclipCliBanner();
+  p.intro(pc.bgCyan(pc.black(" paperclip db:backup ")));
 
   const configPath = resolveConfigPath(opts.config);
   const config = readConfig(opts.config);
   const connection = resolveConnectionString(opts.config);
-  const defaultDir = resolveDefaultBackupDir(resolveCiutatisInstanceId());
+  const defaultDir = resolveDefaultBackupDir(resolvePaperclipInstanceId());
   const configuredDir = opts.dir?.trim() || config?.database.backup.dir || defaultDir;
   const backupDir = resolveBackupDir(configuredDir);
   const retentionDays = normalizeRetentionDays(
@@ -73,11 +73,7 @@ export async function dbBackupCommand(opts: DbBackupOptions): Promise<void> {
     const result = await runDatabaseBackup({
       connectionString: connection.value,
       backupDir,
-      retention: {
-        dailyDays: retentionDays,
-        weeklyWeeks: 4,
-        monthlyMonths: 12,
-      },
+      retention: { dailyDays: retentionDays, weeklyWeeks: 4, monthlyMonths: 1 },
       filenamePrefix,
     });
     spinner.stop(`Backup saved: ${formatDatabaseBackupResult(result)}`);

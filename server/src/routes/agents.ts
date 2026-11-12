@@ -89,10 +89,6 @@ import {
   resolveWorktreeRunExecutionActivationState,
 } from "../services/instance-settings.js";
 import { runClaudeLogin } from "@paperclipai/adapter-claude-local/server";
-import {
-  DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
-  DEFAULT_CODEX_LOCAL_MODEL,
-} from "@paperclipai/adapter-codex-local";
 import { DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX } from "@paperclipai/adapter-codex-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
@@ -197,7 +193,7 @@ export function agentRoutes(
   const recovery = recoveryService(db, { enqueueWakeup: heartbeat.wakeup });
   const issueApprovalsSvc = issueApprovalService(db);
   const secretsSvc = secretService(db);
-  const instructions = agentInstructionsService(db);
+  const instructions = agentInstructionsService();
   const companySkills = companySkillService(db);
   const workspaceOperations = workspaceOperationService(db);
   const instanceSettings = instanceSettingsService(db);
@@ -300,7 +296,7 @@ export function agentRoutes(
     if (environment.driver === "local") {
       return {
         executionTarget: null,
-        environmentName: environment.name ?? null,
+        environmentName: environment.name,
         fallbackChecks: [],
         release: noopRelease,
       };
@@ -322,14 +318,14 @@ export function agentRoutes(
         if (target) {
           return {
             executionTarget: target,
-            environmentName: environment.name ?? null,
+            environmentName: environment.name,
             fallbackChecks: [],
             release: noopRelease,
           };
         }
         return {
           executionTarget: null,
-          environmentName: environment.name ?? null,
+          environmentName: environment.name,
           fallbackChecks: [
             {
               code: "environment_target_unavailable",
@@ -343,7 +339,7 @@ export function agentRoutes(
       } catch (err) {
         return {
           executionTarget: null,
-          environmentName: environment.name ?? null,
+          environmentName: environment.name,
           fallbackChecks: [
             {
               code: "environment_target_failed",
@@ -399,7 +395,7 @@ export function agentRoutes(
     } catch (err) {
       return {
         executionTarget: null,
-        environmentName: environment.name ?? null,
+        environmentName: environment.name,
         fallbackChecks: [
           {
             code: "environment_lease_acquire_failed",
@@ -452,7 +448,7 @@ export function agentRoutes(
       await releaseLease("failed");
       return {
         executionTarget: null,
-        environmentName: environment.name ?? null,
+        environmentName: environment.name,
         fallbackChecks: [
           {
             code: "environment_workspace_realize_failed",
@@ -491,7 +487,7 @@ export function agentRoutes(
       await releaseLease("failed");
       return {
         executionTarget: null,
-        environmentName: environment.name ?? null,
+        environmentName: environment.name,
         fallbackChecks: [
           {
             code: "environment_target_failed",
@@ -508,7 +504,7 @@ export function agentRoutes(
       await releaseLease("failed");
       return {
         executionTarget: null,
-        environmentName: environment.name ?? null,
+        environmentName: environment.name,
         fallbackChecks: [
           {
             code: "environment_target_unsupported",
@@ -523,7 +519,7 @@ export function agentRoutes(
 
     return {
       executionTarget: target,
-      environmentName: environment.name ?? null,
+      environmentName: environment.name,
       fallbackChecks: [],
       sandboxIdentityCheck: buildSandboxIdentityCheck({
         environmentName: environment.name,
@@ -1369,14 +1365,8 @@ export function agentRoutes(
       return (updated as T | null) ?? { ...agent, adapterConfig: nextAdapterConfig };
     }
 
-    const bundleInput = input?.files
+    const files = input?.files
       ?? await loadDefaultAgentInstructionsBundle(resolveDefaultAgentInstructionsBundleRole(agent.role));
-    // Convert bundle files to Record<string, string> format
-    const files: Record<string, string> = Array.isArray((bundleInput as { files?: unknown }).files)
-      ? Object.fromEntries(
-        ((bundleInput as { files: Array<{ path: string; content: string }> }).files).map((f) => [f.path, f.content]),
-      )
-      : (bundleInput as Record<string, string>);
     const materialized = await instructions.materializeManagedBundle(
       agent,
       files,
@@ -1962,8 +1952,8 @@ export function agentRoutes(
           desiredSkillEntries,
           mode: snapshot.mode,
           supported: snapshot.supported,
-          entryCount: snapshot.entries?.length ?? 0,
-          warningCount: snapshot.warnings?.length ?? 0,
+          entryCount: snapshot.entries.length,
+          warningCount: snapshot.warnings.length,
         },
       });
 
@@ -3417,7 +3407,7 @@ export function agentRoutes(
       return;
     }
 
-    const revoked = await svc.revokeKey(keyId);
+    const revoked = await svc.revokeKey(agent.id, keyId);
     if (!revoked) {
       res.status(404).json({ error: "Key not found" });
       return;

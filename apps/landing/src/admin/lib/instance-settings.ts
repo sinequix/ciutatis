@@ -1,4 +1,3 @@
-export const DEFAULT_INSTANCE_SETTINGS_PATH = "/instance/settings/heartbeats";
 export const INSTANCE_SETTINGS_PATH_PREFIX = "/company/settings/instance";
 export const DEFAULT_INSTANCE_SETTINGS_PATH = `${INSTANCE_SETTINGS_PATH_PREFIX}/general`;
 
@@ -26,8 +25,10 @@ function normalizePathForMatching(rawPath: string): { pathname: string; search: 
 
   if (second === "company" || second === "settings" || second === "instance") {
     return { pathname: `/${segments.slice(1).join("/")}`, search, hash };
+  }
 
   return { pathname, search, hash };
+}
 
 function instanceSettingsSuffix(pathname: string): string | null {
   if (pathname === "/company/settings/environments") return "/environments";
@@ -35,17 +36,22 @@ function instanceSettingsSuffix(pathname: string): string | null {
   if (pathname === INSTANCE_SETTINGS_PATH_PREFIX) return "/general";
   if (pathname.startsWith(`${INSTANCE_SETTINGS_PATH_PREFIX}/`)) {
     return pathname.slice(INSTANCE_SETTINGS_PATH_PREFIX.length);
+  }
 
   if (pathname === LEGACY_INSTANCE_SETTINGS_PATH_PREFIX || pathname === "/instance") {
     return "/general";
+  }
   if (pathname.startsWith(`${LEGACY_INSTANCE_SETTINGS_PATH_PREFIX}/`)) {
     return pathname.slice(LEGACY_INSTANCE_SETTINGS_PATH_PREFIX.length);
+  }
 
   if (pathname === LEGACY_SETTINGS_PATH_PREFIX) return "/general";
   if (pathname.startsWith(`${LEGACY_SETTINGS_PATH_PREFIX}/`)) {
     return pathname.slice(LEGACY_SETTINGS_PATH_PREFIX.length);
+  }
 
   return null;
+}
 
 export function normalizeRememberedInstanceSettingsPath(rawPath: string | null): string {
   if (!rawPath) return DEFAULT_INSTANCE_SETTINGS_PATH;
@@ -55,9 +61,6 @@ export function normalizeRememberedInstanceSettingsPath(rawPath: string | null):
   if (!suffix) return DEFAULT_INSTANCE_SETTINGS_PATH;
 
   if (
-    pathname === "/instance/settings/heartbeats" ||
-    pathname === "/instance/settings/plugins" ||
-    pathname === "/instance/settings/experimental"
     suffix === "/profile" ||
     suffix === "/general" ||
     suffix === "/environments" ||

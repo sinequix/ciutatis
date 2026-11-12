@@ -1,4 +1,3 @@
-export { institutions, institutions as companies } from "./institutions.js";
 import { pgTable, uuid, text, integer, timestamp, boolean, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const companies = pgTable(
@@ -19,8 +18,11 @@ export const companies = pgTable(
       .default(10 * 1024 * 1024),
     defaultResponsibleUserId: text("default_responsible_user_id"),
     requireBoardApprovalForNewAgents: boolean("require_board_approval_for_new_agents")
+      .notNull()
       .default(false),
     feedbackDataSharingEnabled: boolean("feedback_data_sharing_enabled")
+      .notNull()
+      .default(false),
     feedbackDataSharingConsentAt: timestamp("feedback_data_sharing_consent_at", { withTimezone: true }),
     feedbackDataSharingConsentByUserId: text("feedback_data_sharing_consent_by_user_id"),
     feedbackDataSharingTermsVersion: text("feedback_data_sharing_terms_version"),

@@ -3,7 +3,7 @@ import type { LlmConfig } from "../config/schema.js";
 
 export async function promptLlm(): Promise<LlmConfig | undefined> {
   const configureLlm = await p.confirm({
-    message: "Configure Cloudflare Workers AI now?",
+    message: "Configure an LLM provider now?",
     initialValue: false,
   });
 
@@ -14,22 +14,23 @@ export async function promptLlm(): Promise<LlmConfig | undefined> {
 
   if (!configureLlm) return undefined;
 
-  const accountId = await p.text({
-    message: "Cloudflare account ID",
-    validate: (val) => {
-      if (!val) return "Account ID is required";
-    },
+  const provider = await p.select({
+    message: "LLM provider",
+    options: [
+      { value: "claude" as const, label: "Claude (Anthropic)" },
+      { value: "openai" as const, label: "OpenAI" },
+    ],
   });
 
-  if (p.isCancel(accountId)) {
+  if (p.isCancel(provider)) {
     p.cancel("Setup cancelled.");
     process.exit(0);
   }
 
   const apiKey = await p.password({
-    message: "Cloudflare API token",
+    message: `${provider === "claude" ? "Anthropic" : "OpenAI"} API key`,
     validate: (val) => {
-      if (!val) return "API token is required";
+      if (!val) return "API key is required";
     },
   });
 
@@ -38,5 +39,5 @@ export async function promptLlm(): Promise<LlmConfig | undefined> {
     process.exit(0);
   }
 
-  return { provider: "cloudflare_workers_ai", apiKey, accountId };
+  return { provider, apiKey };
 }

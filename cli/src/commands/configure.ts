@@ -1,7 +1,7 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { readConfig, writeConfig, configExists, resolveConfigPath } from "../config/store.js";
-import type { CiutatisConfig } from "../config/schema.js";
+import type { PaperclipConfig } from "../config/schema.js";
 import { ensureLocalSecretsKeyFile } from "../config/secrets-key.js";
 import { promptDatabase } from "../prompts/database.js";
 import { promptLlm } from "../prompts/llm.js";
@@ -13,9 +13,9 @@ import {
   resolveDefaultBackupDir,
   resolveDefaultEmbeddedPostgresDir,
   resolveDefaultLogsDir,
-  resolveCiutatisInstanceId,
+  resolvePaperclipInstanceId,
 } from "../config/home.js";
-import { printCiutatisCliBanner } from "../utils/banner.js";
+import { printPaperclipCliBanner } from "../utils/banner.js";
 
 type Section = "llm" | "database" | "logging" | "server" | "storage" | "secrets";
 
@@ -28,8 +28,8 @@ const SECTION_LABELS: Record<Section, string> = {
   secrets: "Secrets",
 };
 
-function defaultConfig(): CiutatisConfig {
-  const instanceId = resolveCiutatisInstanceId();
+function defaultConfig(): PaperclipConfig {
+  const instanceId = resolvePaperclipInstanceId();
   return {
     $meta: {
       version: 1,
@@ -54,6 +54,7 @@ function defaultConfig(): CiutatisConfig {
     server: {
       deploymentMode: "local_trusted",
       exposure: "private",
+      bind: "loopback",
       host: "127.0.0.1",
       port: 3100,
       allowedHostnames: [],
@@ -62,6 +63,9 @@ function defaultConfig(): CiutatisConfig {
     auth: {
       baseUrlMode: "auto",
       disableSignUp: false,
+    },
+    telemetry: {
+      enabled: true,
     },
     storage: defaultStorageConfig(),
     secrets: defaultSecretsConfig(),
@@ -72,18 +76,18 @@ export async function configure(opts: {
   config?: string;
   section?: string;
 }): Promise<void> {
-  printCiutatisCliBanner();
-  p.intro(pc.bgCyan(pc.black(" ciutatis configure ")));
+  printPaperclipCliBanner();
+  p.intro(pc.bgCyan(pc.black(" paperclip configure ")));
   const configPath = resolveConfigPath(opts.config);
 
   if (!configExists(opts.config)) {
-    p.log.error("No config file found. Run `ciutatis onboard` first.");
+    p.log.error("No config file found. Run `paperclipai onboard` first.");
     p.outro("");
     process.exitCode = 1;
     return;
   }
 
-  let config: CiutatisConfig;
+  let config: PaperclipConfig;
   try {
     config = readConfig(opts.config) ?? defaultConfig();
   } catch (err) {

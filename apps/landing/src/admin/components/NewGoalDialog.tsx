@@ -169,7 +169,6 @@ export function NewGoalDialog() {
 
         {/* Description */}
         <div className="px-4 pb-2">
-        <div className="px-4 pb-2 overflow-y-auto max-h-(--sz-50vh)">
           <MarkdownEditor
             ref={descriptionEditorRef}
             value={description}

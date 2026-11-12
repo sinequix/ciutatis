@@ -200,6 +200,10 @@ function toPublicPlaceSummary(row: typeof tenantInstances.$inferSelect): PublicP
     parentSubdivisionName: row.parentSubdivisionName,
     pathPrefix: row.pathPrefix,
     url: deriveTenantUrl(row.routingMode, row.pathPrefix, row.hostname),
+    latitude: null,
+    longitude: null,
+    osmType: null,
+    osmId: null,
   };
 }
 

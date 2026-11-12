@@ -5,42 +5,37 @@ import { z } from "zod";
 import type { Db } from "@paperclipai/db";
 import { agents as agentsTable } from "@paperclipai/db";
 import {
-  createCompanySchema,
-  updateCompanySchema,
   DEFAULT_FEEDBACK_DATA_SHARING_TERMS_VERSION,
   companyArtifactsQuerySchema,
   companyPortabilityExportSchema,
   companyPortabilityImportSchema,
   companyPortabilityPreviewSchema,
+  createCompanySchema,
+  feedbackTargetTypeSchema,
+  feedbackTraceStatusSchema,
+  feedbackVoteValueSchema,
+  updateCompanyBrandingSchema,
+  updateCompanySchema,
 } from "@paperclipai/shared";
+import { badRequest, forbidden } from "../errors.js";
 import { validate } from "../middleware/validate.js";
 import {
+  accessService,
   agentService,
   budgetService,
   companyArtifactsService,
   companyPortabilityService,
   companyService,
+  feedbackService,
   logActivity,
   workTimelineService,
 } from "../services/index.js";
-import { forbidden, notFound } from "../errors.js";
-import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
 import type { StorageService } from "../storage/types.js";
 import { assertBoard, assertCompanyAccess, assertInstanceAdmin, getActorInfo } from "./authz.js";
 import { COMPANY_IMPORT_ROUTE_PATH } from "./company-import-paths.js";
 
-const updateCompanyBrandingSchema = z
-  .object({
-    brandColor: z.string().regex(/^#[0-9a-fA-F]{6}$/).nullable().optional(),
-    logoAssetId: z.string().uuid().nullable().optional(),
-  })
-  .strict();
-
-export function companyRoutes(db: Db): Router {
+export function companyRoutes(db: Db, storage?: StorageService) {
   const router = Router();
-  const companiesSvc = companyService(db);
-  const agentsSvc = agentService(db);
-  const portabilitySvc = companyPortabilityService(db);
   const svc = companyService(db);
   const agents = agentService(db);
   const portability = companyPortabilityService(db, storage);
@@ -51,26 +46,16 @@ export function companyRoutes(db: Db): Router {
   const importJobs = new Map<string, ImportJobRecord>();
   const importJobTerminalRetentionMs = 5 * 60 * 1000;
 
-  async function requireCompany(companyId: string) {
-    const company = await companiesSvc.getById(companyId);
-    if (!company) throw notFound("Company not found");
-    return company;
+  function parseBooleanQuery(value: unknown) {
+    return value === true || value === "true" || value === "1";
   }
 
-  async function assertCanUpdateBranding(req: Request, companyId: string): Promise<void> {
-    assertCompanyAccess(req, companyId);
-    if (req.actor.type === "board") return;
-    if (req.actor.type !== "agent" || !req.actor.agentId) {
-      throw forbidden("Board or CEO agent authentication required");
-    }
-    const agent = await agentsSvc.getById(req.actor.agentId);
-    if (!agent || agent.companyId !== companyId || agent.role !== "ceo") {
-      throw forbidden("Only CEO agents can update company branding");
   function parseDateQuery(value: unknown, field: string) {
     if (typeof value !== "string" || value.trim().length === 0) return undefined;
     const parsed = new Date(value);
     if (Number.isNaN(parsed.getTime())) {
       throw badRequest(`Invalid ${field} query value`);
+    }
     return parsed;
   }
 
@@ -79,6 +64,7 @@ export function companyRoutes(db: Db): Router {
     const parsed = typeof value === "string" ? Number(value) : NaN;
     if (!Number.isFinite(parsed)) {
       throw badRequest(`Invalid ${field} query value`);
+    }
     return Math.floor(parsed);
   }
 
@@ -100,17 +86,21 @@ export function companyRoutes(db: Db): Router {
     if (target.mode === "new_company") {
       assertInstanceAdmin(req);
       return;
+    }
     assertCompanyAccess(req, target.companyId);
   }
 
   async function assertSameCompanyCeoAgentOrBoard(req: Request, companyId: string, capability: string) {
+    assertCompanyAccess(req, companyId);
     if (req.actor.type === "board") {
       return;
+    }
     if (!req.actor.agentId) throw forbidden("Agent authentication required");
 
     const actorAgent = await agents.getById(req.actor.agentId);
     if (!actorAgent || actorAgent.companyId !== companyId) {
       throw forbidden("Agent key cannot access another company");
+    }
     if (actorAgent.role !== "ceo") {
       throw forbidden(`Only CEO agents can manage ${capability}`);
     }
@@ -118,24 +108,25 @@ export function companyRoutes(db: Db): Router {
 
   router.get("/", async (req, res) => {
     assertBoard(req);
-    const companies = await companiesSvc.list();
+    const result = await svc.list();
     if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) {
-      res.json(companies);
+      res.json(result);
       return;
     }
     const allowed = new Set(req.actor.companyIds ?? []);
-    res.json(companies.filter((company) => allowed.has(company.id)));
+    res.json(result.filter((company) => allowed.has(company.id)));
   });
 
   router.get("/stats", async (req, res) => {
     assertBoard(req);
-    const stats = await companiesSvc.stats();
-    if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) {
+    const allowed = req.actor.source === "local_implicit" || req.actor.isInstanceAdmin
+      ? null
+      : new Set(req.actor.companyIds ?? []);
+    const stats = await svc.stats();
+    if (!allowed) {
       res.json(stats);
       return;
     }
-    const allowed = new Set(req.actor.companyIds ?? []);
-    res.json(Object.fromEntries(Object.entries(stats).filter(([companyId]) => allowed.has(companyId))));
     const filtered = Object.fromEntries(Object.entries(stats).filter(([companyId]) => allowed.has(companyId)));
     res.json(filtered);
   });
@@ -223,6 +214,7 @@ export function companyRoutes(db: Db): Router {
     res.json(company);
   });
 
+  router.get("/:companyId/feedback-traces", async (req, res) => {
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
     assertBoard(req);
@@ -380,8 +372,6 @@ export function companyRoutes(db: Db): Router {
 
   router.post("/", validate(createCompanySchema), async (req, res) => {
     assertBoard(req);
-    const company = await companiesSvc.create(req.body);
-    const actor = getActorInfo(req);
     if (!(req.actor.source === "local_implicit" || req.actor.isInstanceAdmin)) {
       throw forbidden("Instance admin required");
     }
@@ -399,54 +389,33 @@ export function companyRoutes(db: Db): Router {
     );
     await logActivity(db, {
       companyId: company.id,
-      actorType: actor.actorType,
-      actorId: actor.actorId,
-      agentId: actor.agentId,
-      runId: actor.runId,
+      actorType: "user",
+      actorId: req.actor.userId ?? "board",
       action: "company.created",
       entityType: "company",
       entityId: company.id,
       details: { name: company.name },
     });
+    if (company.budgetMonthlyCents > 0) {
+      await budgets.upsertPolicy(
+        company.id,
+        {
+          scopeType: "company",
+          scopeId: company.id,
+          amount: company.budgetMonthlyCents,
+          windowKind: "calendar_month_utc",
+        },
+        req.actor.userId ?? "board",
+      );
+    }
     res.status(201).json(company);
   });
 
-  router.post("/import/preview", validate(companyPortabilityPreviewSchema), async (req, res) => {
-    assertBoard(req);
-    res.json(await portabilitySvc.previewImport(req.body));
-  });
-
-  router.post("/import", validate(companyPortabilityImportSchema), async (req, res) => {
-    assertBoard(req);
-    res.status(201).json(await portabilitySvc.importBundle(req.body, req.actor.userId ?? null));
-  });
-
-  router.get("/:companyId", async (req, res) => {
+  router.patch("/:companyId", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
-    res.json(await requireCompany(companyId));
-  });
     await assertSameCompanyCeoAgentOrBoard(req, companyId, "company settings");
 
-  router.patch("/:companyId", validate(updateCompanySchema), async (req, res) => {
-    const companyId = req.params.companyId as string;
-    assertBoard(req);
-    assertCompanyAccess(req, companyId);
-    await requireCompany(companyId);
-    const company = await companiesSvc.update(companyId, req.body);
-    if (!company) throw notFound("Company not found");
     const actor = getActorInfo(req);
-    await logActivity(db, {
-      companyId,
-      actorType: actor.actorType,
-      actorId: actor.actorId,
-      agentId: actor.agentId,
-      runId: actor.runId,
-      action: "company.updated",
-      entityType: "company",
-      entityId: companyId,
-      details: req.body,
-    });
     let body: Record<string, unknown>;
 
     if (req.actor.type === "agent") {
@@ -520,9 +489,6 @@ export function companyRoutes(db: Db): Router {
 
   router.patch("/:companyId/branding", async (req, res) => {
     const companyId = req.params.companyId as string;
-    await assertCanUpdateBranding(req, companyId);
-    const company = await companiesSvc.update(companyId, req.body);
-    if (!company) throw notFound("Company not found");
     await assertSameCompanyCeoAgentOrBoard(req, companyId, "company branding");
     const body = updateCompanyBrandingSchema.parse(req.body);
     const company = await svc.update(companyId, body);
@@ -547,10 +513,7 @@ export function companyRoutes(db: Db): Router {
 
   router.post("/:companyId/archive", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertBoard(req);
     assertCompanyAccess(req, companyId);
-    const company = await companiesSvc.archive(companyId);
-    if (!company) throw notFound("Company not found");
     assertBoard(req);
     const company = await svc.archive(companyId, getActorInfo(req));
     if (!company) {
@@ -562,10 +525,7 @@ export function companyRoutes(db: Db): Router {
 
   router.delete("/:companyId", async (req, res) => {
     const companyId = req.params.companyId as string;
-    assertBoard(req);
     assertCompanyAccess(req, companyId);
-    const removed = await companiesSvc.remove(companyId);
-    if (!removed) throw notFound("Company not found");
     assertBoard(req);
     const company = await svc.remove(companyId);
     if (!company) {
@@ -573,13 +533,6 @@ export function companyRoutes(db: Db): Router {
       return;
     }
     res.json({ ok: true });
-  });
-
-  router.post("/:companyId/export", validate(companyPortabilityExportSchema), async (req, res) => {
-    const companyId = req.params.companyId as string;
-    assertBoard(req);
-    assertCompanyAccess(req, companyId);
-    res.json(await portabilitySvc.exportBundle(companyId, req.body));
   });
 
   return router;

@@ -24,7 +24,6 @@ export const issueTreeHoldMembers = pgTable(
     skipped: boolean("skipped").notNull().default(false),
     skipReason: text("skip_reason"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     holdIssueUniqueIdx: uniqueIndex("issue_tree_hold_members_hold_issue_uq").on(table.holdId, table.issueId),

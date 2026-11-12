@@ -1,4 +1,3 @@
-export { requestComments, requestComments as issueComments } from "./request_comments.js";
 import type {
   IssueCommentAuthorType,
   IssueCommentDerivedAuthorSource,
@@ -50,7 +49,11 @@ export const issueComments = pgTable(
       table.createdAt,
     ),
     companyAuthorIssueCreatedAtIdx: index("issue_comments_company_author_issue_created_at_idx").on(
+      table.companyId,
       table.authorUserId,
+      table.issueId,
+      table.createdAt,
+    ),
     bodySearchIdx: index("issue_comments_body_search_idx").using("gin", table.body.op("gin_trgm_ops")),
   }),
 );

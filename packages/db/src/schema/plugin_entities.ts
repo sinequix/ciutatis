@@ -12,7 +12,7 @@ import { plugins } from "./plugins.js";
 import type { PluginStateScopeKind } from "@paperclipai/shared";
 
 /**
- * `plugin_entities` table — persistent high-level mapping between Ciutatis
+ * `plugin_entities` table — persistent high-level mapping between Paperclip
  * objects and external plugin-defined entities.
  *
  * This table is used by plugins (e.g. `linear`, `github`) to store pointers

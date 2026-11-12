@@ -6,11 +6,11 @@ import type {
 import { parseAdapterModelsEnv } from "../services/adapter-models-env.js";
 import { stampClaudeAgentIdHeader } from "./claude-agent-id-header.js";
 import {
-  execute as claudeExecute,
   buildSandboxNpmInstallCommand,
   getAdapterSessionManagement,
 } from "@paperclipai/adapter-utils";
 import {
+  execute as claudeExecute,
   listClaudeSkills,
   syncClaudeSkills,
   listClaudeModels,
@@ -27,6 +27,8 @@ import {
 } from "@paperclipai/adapter-claude-local";
 import {
   execute as codexExecute,
+  listCodexSkills,
+  syncCodexSkills,
   testEnvironment as codexTestEnvironment,
   sessionCodec as codexSessionCodec,
   getQuotaWindows as codexGetQuotaWindows,
@@ -39,6 +41,8 @@ import {
 } from "@paperclipai/adapter-codex-local";
 import {
   execute as cursorExecute,
+  listCursorSkills,
+  syncCursorSkills,
   testEnvironment as cursorTestEnvironment,
   sessionCodec as cursorSessionCodec,
 } from "@paperclipai/adapter-cursor-local/server";
@@ -56,6 +60,8 @@ import {
 import { agentConfigurationDoc as cursorCloudAgentConfigurationDoc } from "@paperclipai/adapter-cursor-cloud";
 import {
   execute as geminiExecute,
+  listGeminiSkills,
+  syncGeminiSkills,
   testEnvironment as geminiTestEnvironment,
   sessionCodec as geminiSessionCodec,
   getConfigSchema as getGeminiConfigSchema,
@@ -63,6 +69,7 @@ import {
 import {
   agentConfigurationDoc as geminiAgentConfigurationDoc,
   models as geminiModels,
+  modelProfiles as geminiModelProfiles,
 } from "@paperclipai/adapter-gemini-local";
 import {
   execute as grokExecute,
@@ -81,6 +88,8 @@ import {
 } from "@paperclipai/hermes-paperclip-adapter";
 import {
   execute as openCodeExecute,
+  listOpenCodeSkills,
+  syncOpenCodeSkills,
   testEnvironment as openCodeTestEnvironment,
   sessionCodec as openCodeSessionCodec,
   listOpenCodeModels,
@@ -98,18 +107,12 @@ import {
   agentConfigurationDoc as openclawGatewayAgentConfigurationDoc,
   models as openclawGatewayModels,
 } from "@paperclipai/adapter-openclaw-gateway";
-import {
-  execute as cloudflareWorkersAiExecute,
-  testEnvironment as cloudflareWorkersAiTestEnvironment,
-} from "@ciutatis/adapter-cloudflare-workers-ai/server";
-import {
-  agentConfigurationDoc as cloudflareWorkersAiAgentConfigurationDoc,
-  models as cloudflareWorkersAiModels,
-} from "@ciutatis/adapter-cloudflare-workers-ai";
 import { listCodexModels, refreshCodexModels } from "./codex-models.js";
 import { listCursorModels } from "./cursor-models.js";
 import {
   execute as piExecute,
+  listPiSkills,
+  syncPiSkills,
   testEnvironment as piTestEnvironment,
   sessionCodec as piSessionCodec,
   listPiModels,
@@ -118,27 +121,23 @@ import {
   agentConfigurationDoc as piAgentConfigurationDoc,
   modelProfiles as piModelProfiles,
 } from "@paperclipai/adapter-pi-local";
+import { BUILTIN_ADAPTER_TYPES } from "./builtin-adapter-types.js";
+import { buildExternalAdapters } from "./plugin-loader.js";
+import { getDisabledAdapterTypes } from "../services/adapter-plugin-store.js";
 import { processAdapter } from "./process/index.js";
 import { httpAdapter } from "./http/index.js";
 
-function dedupeAdapterModels(models: AdapterModel[]): AdapterModel[] {
-  const seen = new Set<string>();
-  const result: AdapterModel[] = [];
-  for (const model of models) {
-    const id = model.id.trim();
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    result.push({ ...model, id });
-  }
-  return result;
+function readConfiguredCommand(config: Record<string, unknown>, fallback: string): string {
+  const value = typeof config.command === "string" ? config.command.trim() : "";
+  return value.length > 0 ? value : fallback;
 }
 
-function prefixAdapterModelLabels(models: AdapterModel[], provider: "Claude" | "Codex"): AdapterModel[] {
-  const prefix = `${provider}: `;
-  return models.map((model) => ({
-    ...model,
-    label: model.label.startsWith(prefix) ? model.label : `${prefix}${model.label}`,
-  }));
+function hasPathSeparator(command: string): boolean {
+  return command.includes("/") || command.includes("\\");
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
 }
 
 function buildNpmRuntimeCommandSpec(
@@ -146,48 +145,39 @@ function buildNpmRuntimeCommandSpec(
   fallbackCommand: string,
   packageName: string,
 ): AdapterRuntimeCommandSpec {
-  const command = typeof config.command === "string" && config.command.trim() ? config.command.trim() : fallbackCommand;
+  const command = readConfiguredCommand(config, fallbackCommand);
+  const canSelfInstall = !hasPathSeparator(command) && command === fallbackCommand;
+  const installLine = buildSandboxNpmInstallCommand(packageName);
   return {
     command,
     detectCommand: command,
-    installCommand: `npm install -g ${packageName}`,
+    installCommand: canSelfInstall
+      ? `if ! command -v ${shellQuote(command)} >/dev/null 2>&1; then ${installLine}; fi`
+      : null,
   };
 }
 
 function buildCursorRuntimeCommandSpec(config: Record<string, unknown>): AdapterRuntimeCommandSpec {
-  const command = typeof config.command === "string" && config.command.trim() ? config.command.trim() : "agent";
-  return { command, detectCommand: command, installCommand: null };
+  const command = readConfiguredCommand(config, "agent");
+  return {
+    command,
+    detectCommand: command,
+    installCommand: null,
+  };
 }
 
-async function listOpenCodeModelsWithFallback(): Promise<AdapterModel[]> {
-  const discovered = await listOpenCodeModels();
-  return discovered.length > 0 ? dedupeAdapterModels(discovered) : openCodeModels;
-}
-import { BUILTIN_ADAPTER_TYPES } from "./builtin-adapter-types.js";
-import { buildExternalAdapters } from "./plugin-loader.js";
-import { getDisabledAdapterTypes } from "../services/adapter-plugin-store.js";
-function readConfiguredCommand(config: Record<string, unknown>, fallback: string): string {
-  const value = typeof config.command === "string" ? config.command.trim() : "";
-  return value.length > 0 ? value : fallback;
-function hasPathSeparator(command: string): boolean {
-  return command.includes("/") || command.includes("\\");
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'"'"'`)}'`;
-  const command = readConfiguredCommand(config, fallbackCommand);
-  const canSelfInstall = !hasPathSeparator(command) && command === fallbackCommand;
-  const installLine = buildSandboxNpmInstallCommand(packageName);
-    installCommand: canSelfInstall
-      ? `if ! command -v ${shellQuote(command)} >/dev/null 2>&1; then ${installLine}; fi`
-      : null,
-  const command = readConfiguredCommand(config, "agent");
-    installCommand: null,
 const retiredAcpxMessage =
   "The acpx_local adapter has been retired. Existing Claude and Codex ACPX agents should be migrated to claude_local or codex_local with adapterConfig.engine=\"acp\".";
+
 const retiredAcpxAgentConfigurationDoc = `# acpx_local retired
+
 Adapter: acpx_local
+
 The standalone ACPX adapter has been retired. Use:
+
 - claude_local with adapterConfig.engine="acp" for Claude ACP execution.
 - codex_local with adapterConfig.engine="acp" for Codex ACP execution.
+
 Paperclip keeps this tombstone registered so stale acpx_local rows fail clearly instead of falling back to the process adapter.
 `;
 
@@ -209,14 +199,14 @@ const claudeLocalAdapter: ServerAdapterModule = {
   sessionManagement: getAdapterSessionManagement("claude_local") ?? undefined,
   models: claudeModels,
   modelProfiles: claudeModelProfiles,
-  listModels: async () => claudeModels,
   listModels: listClaudeModels,
   refreshModels: refreshClaudeModels,
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: true,
   instructionsPathKey: "instructionsFilePath",
   requiresMaterializedRuntimeSkills: false,
-  getRuntimeCommandSpec: (config) => buildNpmRuntimeCommandSpec(config, "claude", "@anthropic-ai/claude-code"),
+  getRuntimeCommandSpec: (config) =>
+    buildNpmRuntimeCommandSpec(config, "claude", "@anthropic-ai/claude-code"),
   agentConfigurationDoc: claudeAgentConfigurationDoc,
   getConfigSchema: getClaudeConfigSchema,
   getQuotaWindows: claudeGetQuotaWindows,
@@ -298,6 +288,8 @@ const cursorLocalAdapter: ServerAdapterModule = {
   type: "cursor",
   execute: cursorExecute,
   testEnvironment: cursorTestEnvironment,
+  listSkills: listCursorSkills,
+  syncSkills: syncCursorSkills,
   sessionCodec: cursorSessionCodec,
   sessionManagement: getAdapterSessionManagement("cursor") ?? undefined,
   models: cursorModels,
@@ -343,12 +335,13 @@ const geminiLocalAdapter: ServerAdapterModule = {
   sessionCodec: geminiSessionCodec,
   sessionManagement: getAdapterSessionManagement("gemini_local") ?? undefined,
   models: geminiModels,
-  listModels: async () => geminiModels,
+  modelProfiles: geminiModelProfiles,
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: true,
   instructionsPathKey: "instructionsFilePath",
   requiresMaterializedRuntimeSkills: true,
-  getRuntimeCommandSpec: (config) => buildNpmRuntimeCommandSpec(config, "gemini", "@google/gemini-cli"),
+  getRuntimeCommandSpec: (config) =>
+    buildNpmRuntimeCommandSpec(config, "gemini", "@google/gemini-cli"),
   agentConfigurationDoc: geminiAgentConfigurationDoc,
   getConfigSchema: getGeminiConfigSchema,
 };
@@ -393,11 +386,13 @@ const openCodeLocalAdapter: ServerAdapterModule = {
   type: "opencode_local",
   execute: openCodeExecute,
   testEnvironment: openCodeTestEnvironment,
+  listSkills: listOpenCodeSkills,
+  syncSkills: syncOpenCodeSkills,
   sessionCodec: openCodeSessionCodec,
   models: openCodeModels,
   modelProfiles: openCodeModelProfiles,
   sessionManagement: getAdapterSessionManagement("opencode_local") ?? undefined,
-  listModels: listOpenCodeModelsWithFallback,
+  listModels: listOpenCodeModels,
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: true,
   instructionsPathKey: "instructionsFilePath",
@@ -406,50 +401,12 @@ const openCodeLocalAdapter: ServerAdapterModule = {
   agentConfigurationDoc: openCodeAgentConfigurationDoc,
 };
 
-const acpxLocalAdapter: ServerAdapterModule = {
-  type: "acpx_local",
-  execute: async () => {
-    throw new Error("The ACPX local adapter is not available in this Ciutatis build.");
-  },
-  testEnvironment: async () => ({
-    adapterType: "acpx_local",
-    status: "fail",
-    checks: [{
-      code: "acpx_local_unavailable",
-      level: "error",
-      message: "The ACPX local adapter is not available in this Ciutatis build.",
-    }],
-    testedAt: new Date().toISOString(),
-  }),
-  models: dedupeAdapterModels([
-    ...prefixAdapterModelLabels(claudeModels, "Claude"),
-    ...prefixAdapterModelLabels(codexModels, "Codex"),
-  ]),
-  listModels: async () => acpxLocalAdapter.models ?? [],
-  supportsLocalAgentJwt: true,
-  supportsInstructionsBundle: true,
-  instructionsPathKey: "instructionsFilePath",
-  requiresMaterializedRuntimeSkills: true,
-  agentConfigurationDoc: "ACPX local adapter compatibility entry.",
-};
-
-const cloudflareWorkersAiAdapter: ServerAdapterModule = {
-  type: "cloudflare_workers_ai",
-  execute: cloudflareWorkersAiExecute,
-  testEnvironment: cloudflareWorkersAiTestEnvironment,
-  models: cloudflareWorkersAiModels,
-  listModels: async () => cloudflareWorkersAiModels,
-  supportsLocalAgentJwt: false,
-  supportsInstructionsBundle: true,
-  instructionsPathKey: "instructionsFilePath",
-  requiresMaterializedRuntimeSkills: false,
-  agentConfigurationDoc: cloudflareWorkersAiAgentConfigurationDoc,
-};
-
 const piLocalAdapter: ServerAdapterModule = {
   type: "pi_local",
   execute: piExecute,
   testEnvironment: piTestEnvironment,
+  listSkills: listPiSkills,
+  syncSkills: syncPiSkills,
   sessionCodec: piSessionCodec,
   sessionManagement: getAdapterSessionManagement("pi_local") ?? undefined,
   models: [],
@@ -459,25 +416,12 @@ const piLocalAdapter: ServerAdapterModule = {
   supportsInstructionsBundle: true,
   instructionsPathKey: "instructionsFilePath",
   requiresMaterializedRuntimeSkills: true,
-  getRuntimeCommandSpec: (config) => buildNpmRuntimeCommandSpec(config, "pi", "@mariozechner/pi-coding-agent"),
+  getRuntimeCommandSpec: (config) =>
+    buildNpmRuntimeCommandSpec(config, "pi", "@mariozechner/pi-coding-agent"),
   agentConfigurationDoc: piAgentConfigurationDoc,
 };
 
 const adaptersByType = new Map<string, ServerAdapterModule>();
-const pausedAdapterOverrides = new Set<string>();
-for (const adapter of [
-  claudeLocalAdapter,
-  codexLocalAdapter,
-  cursorLocalAdapter,
-  geminiLocalAdapter,
-  acpxLocalAdapter,
-  openCodeLocalAdapter,
-  piLocalAdapter,
-  openclawGatewayAdapter,
-  cloudflareWorkersAiAdapter,
-  processAdapter,
-  httpAdapter,
-]) {
 
 // For builtin types that are overridden by an external adapter, we keep the
 // original builtin so it can be restored when the override is deactivated.
@@ -605,8 +549,31 @@ export function registerServerAdapter(adapter: ServerAdapterModule): void {
   adaptersByType.set(adapter.type, adapter);
 }
 
+export function unregisterServerAdapter(type: string): void {
+  if (type === processAdapter.type || type === httpAdapter.type) return;
+  if (builtinFallbacks.has(type)) {
+    pausedOverrides.delete(type);
+    const fallback = builtinFallbacks.get(type);
+    if (fallback) {
+      adaptersByType.set(type, fallback);
+    }
+    return;
+  }
+  if (BUILTIN_ADAPTER_TYPES.has(type)) {
+    return;
+  }
+  adaptersByType.delete(type);
+}
+
+export function requireServerAdapter(type: string): ServerAdapterModule {
+  const adapter = findActiveServerAdapter(type);
+  if (!adapter) {
+    throw new Error(`Unknown adapter type: ${type}`);
+  }
+  return adapter;
+}
+
 export function getServerAdapter(type: string): ServerAdapterModule {
-  return adaptersByType.get(type) ?? processAdapter;
   return findActiveServerAdapter(type) ?? processAdapter;
 }
 
@@ -759,67 +726,9 @@ export function findServerAdapter(type: string): ServerAdapterModule | null {
 }
 
 export function findActiveServerAdapter(type: string): ServerAdapterModule | null {
-  if (pausedAdapterOverrides.has(type)) return null;
-  return findServerAdapter(type);
-}
-
-export function requireServerAdapter(type: string): ServerAdapterModule {
-  const adapter = findActiveServerAdapter(type);
-  if (!adapter) throw new Error(`Unknown adapter type: ${type}`);
-  return adapter;
-}
-
-export function listServerAdapters(): ServerAdapterModule[] {
-  return Array.from(adaptersByType.values());
-}
-
-export async function listAdapterModels(type: string): Promise<AdapterModel[]> {
-  const adapter = findActiveServerAdapter(type);
-  if (!adapter) return [];
-  if (adapter.listModels) return adapter.listModels();
-  return adapter.models ?? [];
-}
-
-export async function refreshAdapterModels(type: string): Promise<AdapterModel[]> {
-  const adapter = findActiveServerAdapter(type);
-  if (!adapter) return [];
-  if (adapter.refreshModels) return adapter.refreshModels();
-  if (adapter.listModels) return adapter.listModels();
-  return adapter.models ?? [];
-}
-
-export async function listAdapterModelProfiles(type: string): Promise<AdapterModelProfileDefinition[]> {
-  const adapter = findActiveServerAdapter(type);
-  if (!adapter) return [];
-  return adapter.modelProfiles ?? [];
-}
-
-export async function detectAdapterModel(
-  _type: string,
-): Promise<{ model: string; provider: string; source: string; candidates?: string[] } | null> {
-  return null;
-}
-
-export const waitForExternalAdapters: Promise<void> = Promise.resolve();
-
-export function registerServerAdapter(adapter: ServerAdapterModule): void {
-  adaptersByType.set(adapter.type, adapter);
-}
-
-export function unregisterServerAdapter(type: string): void {
-  if (type === processAdapter.type || type === httpAdapter.type) return;
-  adaptersByType.delete(type);
-  pausedAdapterOverrides.delete(type);
-}
-
-export function setOverridePaused(type: string, paused: boolean): void {
-  if (paused) {
-    pausedAdapterOverrides.add(type);
-  } else {
-    pausedAdapterOverrides.delete(type);
+  if (pausedOverrides.has(type)) {
+    const fallback = builtinFallbacks.get(type);
+    if (fallback) return fallback;
   }
-}
-
-export function isOverridePaused(type: string): boolean {
-  return pausedAdapterOverrides.has(type);
+  return adaptersByType.get(type) ?? null;
 }

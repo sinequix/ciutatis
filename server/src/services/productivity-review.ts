@@ -1,5 +1,3 @@
-// Stub - productivity-review not in Ciutatis V1 scope
-// This file exists only to satisfy upstream imports
 import { and, asc, desc, eq, gt, gte, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { clampIssueRequestDepth } from "@paperclipai/shared";
@@ -17,18 +15,23 @@ import { logActivity } from "./activity-log.js";
 import { budgetService } from "./budgets.js";
 import { issueService } from "./issues.js";
 import { visibleIssueCondition } from "./issue-visibility.js";
+import {
   recoveryAssigneeAdapterOverrides,
   withRecoveryModelProfileHint,
 } from "./recovery/model-profile-hint.js";
 import { RECOVERY_ORIGIN_KINDS } from "./recovery/origins.js";
 
-export const PRODUCTIVITY_REVIEW_ORIGIN_KIND = "productivity_review";
+export const PRODUCTIVITY_REVIEW_ORIGIN_KIND = RECOVERY_ORIGIN_KINDS.issueProductivityReview;
+export const DEFAULT_PRODUCTIVITY_REVIEW_NO_COMMENT_STREAK_RUNS = 10;
+export const DEFAULT_PRODUCTIVITY_REVIEW_LONG_ACTIVE_HOURS = 6;
+export const DEFAULT_PRODUCTIVITY_REVIEW_HIGH_CHURN_HOURLY = 10;
+export const DEFAULT_PRODUCTIVITY_REVIEW_HIGH_CHURN_SIX_HOURS = 30;
+export const DEFAULT_PRODUCTIVITY_REVIEW_RESOLVED_SNOOZE_MS = 6 * 60 * 60 * 1000;
+export const DEFAULT_PRODUCTIVITY_REVIEW_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
+export const DEFAULT_PRODUCTIVITY_REVIEW_MAX_REFRESH_COMMENTS = 3;
+export const DEFAULT_PRODUCTIVITY_REVIEW_CREATION_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const DEFAULT_PRODUCTIVITY_REVIEW_MAX_CREATIONS_PER_WINDOW = 3;
 
-export interface ProductivityReviewService {
-  createReview(): Promise<unknown>;
-  getReview(): Promise<unknown>;
-  // Upstream-only methods for heartbeat integration
-  isProductivityReviewContinuationHoldActive(_input: {
 const TERMINAL_RUN_STATUSES = ["succeeded", "interrupted", "failed", "cancelled", "timed_out"] as const;
 const ACTIVE_RUN_STATUSES = ["queued", "running", "scheduled_retry"] as const;
 const MAX_CANDIDATE_ISSUES = 250;
@@ -851,55 +854,64 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
   async function isProductivityReviewContinuationHoldActive(input: {
     companyId: string;
     issueId: string;
-    agentId: string | null;
-  }): Promise<{
-    held: boolean;
-    reviewIdentifier?: string | null;
-    reviewIssueId?: string | null;
-    trigger?: string | null;
-    reason?: string | null;
-  }>;
-  recordContinuationHold(_input: {
+    agentId: string;
+    now?: Date;
+    thresholds?: Partial<ProductivityReviewThresholds>;
+  }) {
+    const now = input.now ?? new Date();
+    const thresholds = buildThresholds(input.thresholds);
+    const [sourceIssue, sourceAgent, openReview] = await Promise.all([
+      db
+        .select()
+        .from(issues)
+        .where(and(eq(issues.companyId, input.companyId), eq(issues.id, input.issueId)))
+        .then((rows) => rows[0] ?? null),
+      getAgent(input.agentId),
+      findOpenProductivityReview(input.companyId, input.issueId),
+    ]);
+    if (!sourceIssue || !sourceAgent || !openReview) return { held: false as const };
+    if (sourceAgent.companyId !== input.companyId) return { held: false as const };
+    const evidence = await collectEvidence(sourceIssue, sourceAgent, thresholds, now);
+    if (!evidence || !isSoftStopTrigger(evidence.trigger)) return { held: false as const };
+    return {
+      held: true as const,
+      reviewIssueId: openReview.id,
+      reviewIdentifier: openReview.identifier,
+      trigger: evidence.trigger,
+      reason: evidence.triggerReasons.join("; "),
+    };
+  }
+
+  async function recordContinuationHold(input: {
     companyId: string;
     issueId: string;
     runId: string;
-    agentId: string | null;
-    reviewIssueId?: string | null;
-    trigger?: string | null;
-    reason?: string | null;
-  }): Promise<void>;
-  // Upstream-only: reconciliation for heartbeat.ts
-  reconcileProductivityReviews(_opts?: { now?: Date; companyId?: string }): Promise<{
-    created: number;
-    updated: number;
-    failed: number;
-  }>;
-}
+    agentId: string;
+    reviewIssueId: string;
+    trigger: ProductivityReviewTrigger;
+    reason: string;
+  }) {
+    await logActivity(db, {
+      companyId: input.companyId,
+      actorType: "system",
+      actorId: "system",
+      agentId: input.agentId,
+      runId: input.runId,
+      action: "issue.productivity_review_continuation_held",
+      entityType: "issue",
+      entityId: input.issueId,
+      details: {
+        source: "productivity_review.continuation_hold",
+        reviewIssueId: input.reviewIssueId,
+        trigger: input.trigger,
+        reason: input.reason,
+      },
+    });
+  }
 
-export interface WakeupOptions {
-  force?: boolean;
-  reason?: string;
-}
-
-export function productivityReviewService(
-  _db?: unknown,
-  _hooks?: { enqueueWakeup?: (agentId: string, opts?: WakeupOptions) => Promise<unknown> }
-): ProductivityReviewService {
   return {
-    async createReview() {
-      return null;
-    },
-    async getReview() {
-      return null;
-    },
-    async isProductivityReviewContinuationHoldActive() {
-      return { held: false };
-    },
-    async recordContinuationHold() {
-      // No-op
-    },
-    async reconcileProductivityReviews() {
-      return { created: 0, updated: 0, failed: 0 };
-    },
+    reconcileProductivityReviews,
+    isProductivityReviewContinuationHoldActive,
+    recordContinuationHold,
   };
 }

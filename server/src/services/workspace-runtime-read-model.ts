@@ -1,22 +1,10 @@
 import type { Db } from "@paperclipai/db";
-import type { WorkspaceRuntimeService } from "@paperclipai/shared";
+import { workspaceRuntimeServices } from "@paperclipai/db";
+import { and, desc, eq, inArray } from "drizzle-orm";
 
-export async function listCurrentRuntimeServicesForExecutionWorkspaces(
-  _db: Db,
-  _companyId: string,
-  _executionWorkspaceIds: string[],
-): Promise<Map<string, WorkspaceRuntimeService[]>> {
-  return new Map();
-}
-
-export async function listCurrentRuntimeServicesForProjectWorkspaces(
-  _db: Db,
-  _companyId: string,
-  _projectWorkspaceIds: string[],
-): Promise<Map<string, WorkspaceRuntimeService[]>> {
-  return new Map();
 type WorkspaceRuntimeServiceRow = typeof workspaceRuntimeServices.$inferSelect;
 type RuntimeServiceReadDb = Pick<Db, "select">;
+
 function runtimeServiceIdentityKey(row: WorkspaceRuntimeServiceRow) {
   if (row.reuseKey) return row.reuseKey;
   return [
@@ -28,6 +16,8 @@ function runtimeServiceIdentityKey(row: WorkspaceRuntimeServiceRow) {
     row.command ?? "",
     row.cwd ?? "",
   ].join(":");
+}
+
 export function selectCurrentRuntimeServiceRows(rows: WorkspaceRuntimeServiceRow[]) {
   const current = new Map<string, WorkspaceRuntimeServiceRow>();
   for (const row of rows) {
@@ -35,11 +25,15 @@ export function selectCurrentRuntimeServiceRows(rows: WorkspaceRuntimeServiceRow
     if (!current.has(identity)) current.set(identity, row);
   }
   return [...current.values()];
+}
+
+export async function listCurrentRuntimeServicesForProjectWorkspaces(
   db: RuntimeServiceReadDb,
   companyId: string,
   projectWorkspaceIds: string[],
 ) {
   if (projectWorkspaceIds.length === 0) return new Map<string, WorkspaceRuntimeServiceRow[]>();
+
   const rows = await db
     .select()
     .from(workspaceRuntimeServices)
@@ -51,6 +45,7 @@ export function selectCurrentRuntimeServiceRows(rows: WorkspaceRuntimeServiceRow
       ),
     )
     .orderBy(desc(workspaceRuntimeServices.updatedAt), desc(workspaceRuntimeServices.createdAt));
+
   const grouped = new Map<string, WorkspaceRuntimeServiceRow[]>();
   for (const row of rows) {
     if (!row.projectWorkspaceId) continue;
@@ -58,17 +53,22 @@ export function selectCurrentRuntimeServiceRows(rows: WorkspaceRuntimeServiceRow
     existing.push(row);
     grouped.set(row.projectWorkspaceId, existing);
   }
+
   return new Map(
     Array.from(grouped.entries()).map(([workspaceId, workspaceRows]) => [
       workspaceId,
       selectCurrentRuntimeServiceRows(workspaceRows),
     ]),
   );
+}
+
+export async function listCurrentRuntimeServicesForExecutionWorkspaces(
   db: RuntimeServiceReadDb,
   companyId: string,
   executionWorkspaceIds: string[],
 ) {
   if (executionWorkspaceIds.length === 0) return new Map<string, WorkspaceRuntimeServiceRow[]>();
+
   const rows = await db
     .select()
     .from(workspaceRuntimeServices)
@@ -79,6 +79,7 @@ export function selectCurrentRuntimeServiceRows(rows: WorkspaceRuntimeServiceRow
       ),
     )
     .orderBy(desc(workspaceRuntimeServices.updatedAt), desc(workspaceRuntimeServices.createdAt));
+
   const grouped = new Map<string, WorkspaceRuntimeServiceRow[]>();
   for (const row of rows) {
     if (!row.executionWorkspaceId) continue;
@@ -86,6 +87,7 @@ export function selectCurrentRuntimeServiceRows(rows: WorkspaceRuntimeServiceRow
     existing.push(row);
     grouped.set(row.executionWorkspaceId, existing);
   }
+
   return new Map(
     Array.from(grouped.entries()).map(([workspaceId, workspaceRows]) => [
       workspaceId,

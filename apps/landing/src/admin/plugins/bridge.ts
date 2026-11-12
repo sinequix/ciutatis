@@ -38,8 +38,6 @@ import { ApiError } from "@/api/client";
 import { useToast, type ToastInput } from "@/context/ToastContext";
 import { useLocation, useNavigate } from "@/lib/router";
 import { useSidebar } from "@/context/SidebarContext";
-import { isGlobalPath, normalizeCompanyPrefix } from "@/lib/company-routes";
-import { normalizeRememberedInstanceSettingsPath } from "@/lib/instance-settings";
 
 // ---------------------------------------------------------------------------
 // Bridge error type (mirrors the SDK's PluginBridgeError)
@@ -223,97 +221,6 @@ function serializeRenderEnvironmentSnapshot(
   snapshot: PluginLauncherRenderContextSnapshot | null,
 ): string {
   return snapshot ? JSON.stringify(snapshot) : "";
-}
-
-function splitPath(path: string): { pathname: string; search: string; hash: string } {
-  const match = path.match(/^([^?#]*)(\?[^#]*)?(#.*)?$/);
-  return {
-    pathname: match?.[1] ?? path,
-    search: match?.[2] ?? "",
-    hash: match?.[3] ?? "",
-  };
-}
-
-function sameOriginPathFromHref(href: string): string | null {
-  if (!/^[a-z][a-z\d+.-]*:/i.test(href) && !href.startsWith("//")) {
-    return href;
-  }
-  if (typeof window === "undefined") return null;
-  try {
-    const url = new URL(href, window.location.origin);
-    if (url.origin !== window.location.origin) return null;
-    return `${url.pathname}${url.search}${url.hash}`;
-  } catch {
-    return null;
-  }
-}
-
-function hasCompanyPrefix(pathname: string, companyPrefix: string): boolean {
-  const [firstSegment] = pathname.split("/").filter(Boolean);
-  return firstSegment?.toUpperCase() === normalizeCompanyPrefix(companyPrefix);
-}
-
-function isLegacyInstanceSettingsPath(pathname: string): boolean {
-  return (
-    pathname === "/instance" ||
-    pathname === "/instance/settings" ||
-    pathname.startsWith("/instance/settings/") ||
-    pathname === "/settings" ||
-    pathname.startsWith("/settings/")
-  );
-}
-
-/**
- * Resolve a plugin-provided Paperclip path to the active company scope.
- *
- * This intentionally handles plugin page roots such as `/wiki`, which cannot
- * be listed in the host router's static board-route table ahead of time.
- */
-export function resolveHostNavigationHref(
-  to: string,
-  companyPrefix: string | null | undefined,
-): string {
-  const sameOriginPath = sameOriginPathFromHref(to);
-  if (sameOriginPath === null) return to;
-
-  const { pathname, search, hash } = splitPath(sameOriginPath);
-  if (isLegacyInstanceSettingsPath(pathname)) {
-    const canonicalPath = normalizeRememberedInstanceSettingsPath(`${pathname}${search}${hash}`);
-    if (!companyPrefix) return canonicalPath;
-    return `/${normalizeCompanyPrefix(companyPrefix)}${canonicalPath}`;
-  }
-
-  if (!pathname.startsWith("/") || isGlobalPath(pathname) || !companyPrefix) {
-    return sameOriginPath;
-  }
-
-  if (hasCompanyPrefix(pathname, companyPrefix)) {
-    return sameOriginPath;
-  }
-
-  return `/${normalizeCompanyPrefix(companyPrefix)}${pathname}${search}${hash}`;
-}
-
-function isPlainLeftClick(event: ReactMouseEvent<HTMLAnchorElement>): boolean {
-  return (
-    !event.defaultPrevented &&
-    event.button === 0 &&
-    !event.metaKey &&
-    !event.altKey &&
-    !event.ctrlKey &&
-    !event.shiftKey
-  );
-}
-
-export function shouldHandleHostNavigationClick(
-  event: ReactMouseEvent<HTMLAnchorElement>,
-  href: string,
-  target?: string,
-): boolean {
-  if (!isPlainLeftClick(event)) return false;
-  if (target && target !== "_self") return false;
-  if (event.currentTarget.hasAttribute("download")) return false;
-  return sameOriginPathFromHref(href) !== null;
 }
 
 /**

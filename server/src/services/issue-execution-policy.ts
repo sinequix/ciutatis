@@ -1,17 +1,76 @@
-// Stub file for upstream feature not used in ciutatis
-// Issue execution policy functions
+import { randomUUID } from "node:crypto";
+import type {
+  IssueExecutionDecision,
+  IssueExecutionMonitorClearReason,
+  IssueExecutionMonitorPolicy,
+  IssueExecutionMonitorState,
+  IssueExecutionPolicy,
+  IssueExecutionStage,
+  IssueExecutionStagePrincipal,
+  IssueExecutionState,
+  IssueMonitorScheduledBy,
+} from "@paperclipai/shared";
+import { issueExecutionPolicySchema, issueExecutionStateSchema } from "@paperclipai/shared";
+import { unprocessable } from "../errors.js";
 
-export interface IssueMonitorPatch {
+type AssigneeLike = {
+  assigneeAgentId?: string | null;
+  assigneeUserId?: string | null;
+};
+
+type IssueLike = AssigneeLike & {
+  status: string;
+  executionPolicy?: IssueExecutionPolicy | Record<string, unknown> | null;
+  executionState?: IssueExecutionState | Record<string, unknown> | null;
   monitorNextCheckAt?: Date | null;
   monitorWakeRequestedAt?: Date | null;
   monitorLastTriggeredAt?: Date | null;
   monitorAttemptCount?: number | null;
   monitorNotes?: string | null;
   monitorScheduledBy?: string | null;
-  executionState?: Record<string, unknown> | null;
+};
+
+type ActorLike = {
+  agentId?: string | null;
+  userId?: string | null;
+};
+
+type RequestedAssigneePatch = {
+  assigneeAgentId?: string | null;
+  assigneeUserId?: string | null;
+};
+
+type TransitionInput = {
+  issue: IssueLike;
+  policy: IssueExecutionPolicy | null;
+  previousPolicy?: IssueExecutionPolicy | null;
+  requestedStatus?: string;
+  requestedAssigneePatch: RequestedAssigneePatch;
+  actor: ActorLike;
+  commentBody?: string | null;
+  reviewRequest?: IssueExecutionState["reviewRequest"] | null;
+  monitorExplicitlyUpdated?: boolean;
+};
+
+type TransitionResult = {
+  patch: Record<string, unknown>;
+  decision?: Pick<IssueExecutionDecision, "stageId" | "stageType" | "outcome" | "body">;
+  workflowControlledAssignment?: boolean;
+};
+
+const COMPLETED_STATUS: IssueExecutionState["status"] = "completed";
+const PENDING_STATUS: IssueExecutionState["status"] = "pending";
+const CHANGES_REQUESTED_STATUS: IssueExecutionState["status"] = "changes_requested";
+const MONITOR_INVALID_MESSAGE = "Monitor can only be scheduled on issues assigned to an agent in in_progress or in_review";
+const MONITOR_BOUNDS_EXHAUSTED_MESSAGE = "Monitor bounds are already exhausted";
+export const REDACTED_ISSUE_MONITOR_EXTERNAL_REF = "[redacted]";
+
+function normalizeMonitorNotes(notes: string | null | undefined) {
+  if (typeof notes !== "string") return null;
+  const trimmed = notes.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
-export interface IssueExecutionState {
 function normalizeMonitorText(value: string | null | undefined) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
@@ -908,62 +967,89 @@ function applyMonitorTransition(input: TransitionInput, stagePatch: Record<strin
 export function buildInitialIssueMonitorFields(input: {
   policy: IssueExecutionPolicy | null;
   status: string;
-  lastHeartbeatAt?: Date;
-  attemptCount?: number;
-  // Upstream-only: execution state tracking properties
-  currentParticipant?: { type: string; agentId?: string | null } | null;
-  currentStageType?: string | null;
-}
-
-export function buildInitialIssueMonitorFields(_input: {
-  projectPolicy?: unknown;
-  issueSettings?: unknown;
-}): Record<string, unknown> {
-  return {};
-}
-
-export function buildIssueMonitorClearedPatch(
-  _input: {
-    issue?: unknown;
-    policy?: unknown;
-    clearReason?: string;
-    clearedAt?: Date;
+  assigneeAgentId?: string | null;
+  assigneeUserId?: string | null;
+}) {
+  if (!input.policy?.monitor) return {};
+  if (!issueAllowsMonitor(input.status, input.assigneeAgentId ?? null, input.assigneeUserId ?? null)) {
+    throw unprocessable(MONITOR_INVALID_MESSAGE);
   }
-): IssueMonitorPatch {
+  const exhaustedReason = exhaustedMonitorClearReason({
+    monitor: input.policy.monitor,
+    attemptCount: 0,
+    now: new Date(),
+  });
+  if (exhaustedReason) {
+    throw unprocessable(MONITOR_BOUNDS_EXHAUSTED_MESSAGE, { clearReason: exhaustedReason });
+  }
+
+  const monitorState = buildScheduledMonitorState(null, input.policy.monitor);
   return {
+    monitorNextCheckAt: new Date(input.policy.monitor.nextCheckAt),
+    monitorWakeRequestedAt: null,
+    monitorNotes: input.policy.monitor.notes ?? null,
+    monitorScheduledBy: input.policy.monitor.scheduledBy,
+    executionState: executionStateWithMonitor(null, monitorState) as Record<string, unknown> | null,
+  };
+}
+
+export function buildIssueMonitorTriggeredPatch(input: {
+  issue: IssueLike;
+  policy: IssueExecutionPolicy | null;
+  triggeredAt: Date;
+}) {
+  const existingState = parseIssueExecutionState(input.issue.executionState);
+  const currentMonitorState = derivePersistedMonitorState({
+    issue: input.issue,
+    state: existingState,
+    policy: input.policy,
+  });
+  const nextMonitorState = buildTriggeredMonitorState({
+    previous: currentMonitorState,
+    triggeredAt: input.triggeredAt,
+  });
+
+  return {
+    executionPolicy: stripMonitorFromExecutionPolicy(input.policy) as Record<string, unknown> | null,
+    executionState: executionStateWithMonitor(existingState, nextMonitorState) as Record<string, unknown> | null,
     monitorNextCheckAt: null,
     monitorWakeRequestedAt: null,
-    monitorLastTriggeredAt: null,
-    monitorAttemptCount: null,
-    monitorNotes: null,
-    monitorScheduledBy: null,
+    monitorLastTriggeredAt: input.triggeredAt,
+    monitorAttemptCount: nextMonitorState.attemptCount,
+    monitorNotes: nextMonitorState.notes,
+    monitorScheduledBy: nextMonitorState.scheduledBy,
   };
 }
 
-export function buildIssueMonitorTriggeredPatch(
-  _opts?: { triggeredBy?: string; notes?: string; issue?: unknown; policy?: unknown; triggeredAt?: Date }
-): IssueMonitorPatch {
+export function buildIssueMonitorClearedPatch(input: {
+  issue: IssueLike;
+  policy: IssueExecutionPolicy | null;
+  clearReason: IssueExecutionMonitorClearReason;
+  clearedAt?: Date;
+}) {
+  const existingState = parseIssueExecutionState(input.issue.executionState);
+  const currentMonitorState = derivePersistedMonitorState({
+    issue: input.issue,
+    state: existingState,
+    policy: input.policy,
+  });
+  const nextMonitorState = buildClearedMonitorState({
+    previous: currentMonitorState,
+    clearReason: input.clearReason,
+    clearedAt: input.clearedAt ?? new Date(),
+  });
+
   return {
-    monitorLastTriggeredAt: new Date(),
-    monitorAttemptCount: 0,
+    executionPolicy: stripMonitorFromExecutionPolicy(input.policy) as Record<string, unknown> | null,
+    executionState: executionStateWithMonitor(existingState, nextMonitorState) as Record<string, unknown> | null,
+    monitorNextCheckAt: null,
+    monitorWakeRequestedAt: null,
   };
 }
 
-export interface NormalizedIssueExecutionPolicy {
-  monitor?: {
-    serviceName?: string | null;
-    timeoutAt?: string | null;
-    maxAttempts?: number | null;
-    recoveryPolicy?: string | null;
-  } | null;
-}
-
-export function normalizeIssueExecutionPolicy(_policy: unknown): NormalizedIssueExecutionPolicy | null {
-  return null;
-}
-
-export function parseIssueExecutionState(
-  _state: unknown
-): IssueExecutionState | null {
-  return null;
+export function applyIssueExecutionPolicyTransition(input: TransitionInput): TransitionResult {
+  const stageResult = applyIssueExecutionStageTransition(input);
+  const monitorPatch = applyMonitorTransition(input, stageResult.patch);
+  Object.assign(stageResult.patch, monitorPatch);
+  return stageResult;
 }

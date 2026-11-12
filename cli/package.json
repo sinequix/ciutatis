@@ -4,12 +4,10 @@
   "description": "Paperclip CLI — orchestrate AI agent teams to run a business",
   "type": "module",
   "bin": {
-    "paperclipai": "./dist/index.js",
-    "ciutatis": "./dist/index.js"
+    "paperclipai": "./dist/index.js"
   },
   "keywords": [
     "paperclip",
-    "ciutatis",
     "ai",
     "agents",
     "orchestration",
@@ -18,12 +16,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/tebayoso/ciutatis",
+    "url": "https://github.com/paperclipai/paperclip",
     "directory": "cli"
   },
-  "homepage": "https://github.com/tebayoso/ciutatis",
+  "homepage": "https://github.com/paperclipai/paperclip",
   "bugs": {
-    "url": "https://github.com/tebayoso/ciutatis/issues"
+    "url": "https://github.com/paperclipai/paperclip/issues"
   },
   "files": [
     "dist"
@@ -39,7 +37,6 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.10.0",
-    "@ciutatis/adapter-cloudflare-workers-ai": "workspace:*",
     "@paperclipai/adapter-claude-local": "workspace:*",
     "@paperclipai/adapter-codex-local": "workspace:*",
     "@paperclipai/adapter-cursor-cloud": "workspace:*",

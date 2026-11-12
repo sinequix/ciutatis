@@ -1,23 +1,24 @@
-// Stub file for upstream features not in Ciutatis
-// Company member roles service
+import { PERMISSION_KEYS } from "@paperclipai/shared";
+import type { HumanCompanyMembershipRole } from "@paperclipai/shared";
 
-export type HumanRole = "owner" | "admin" | "operator" | "viewer";
+const HUMAN_COMPANY_MEMBERSHIP_ROLES: HumanCompanyMembershipRole[] = [
+  "owner",
+  "admin",
+  "operator",
+  "viewer",
+];
 
 export function normalizeHumanRole(
-  role: string | null | undefined,
-  defaultRole: HumanRole = "operator",
-): HumanRole {
-  if (role === "owner" || role === "admin" || role === "operator" || role === "viewer") {
-    return role;
-  }
-  return defaultRole;
+  value: unknown,
+  fallback: HumanCompanyMembershipRole = "operator"
+): HumanCompanyMembershipRole {
+  if (value === "member") return "operator";
+  return HUMAN_COMPANY_MEMBERSHIP_ROLES.includes(value as HumanCompanyMembershipRole)
+    ? (value as HumanCompanyMembershipRole)
+    : fallback;
 }
 
 export function grantsForHumanRole(
-  role: HumanRole,
-): Array<{ permissionKey: string; scope: Record<string, unknown> | null }> {
-  // Ciutatis: simplified grants - board has full access
-  return [];
   role: HumanCompanyMembershipRole
 ): Array<{
   permissionKey: (typeof PERMISSION_KEYS)[number];
@@ -53,18 +54,12 @@ export function grantsForHumanRole(
 }
 
 export function resolveHumanInviteRole(
-  defaultsPayload: Record<string, unknown> | null | undefined,
-): HumanRole | null {
-  if (!defaultsPayload || typeof defaultsPayload !== "object") return null;
-  const human = defaultsPayload.human as Record<string, unknown> | undefined;
-  if (!human || typeof human !== "object") return null;
-  const role = human.role as string | undefined;
-  if (role === "owner" || role === "admin" || role === "operator" || role === "viewer") {
-    return role;
+  defaultsPayload: Record<string, unknown> | null | undefined
+): HumanCompanyMembershipRole {
+  if (!defaultsPayload || typeof defaultsPayload !== "object") return "operator";
+  const scoped = defaultsPayload.human;
+  if (!scoped || typeof scoped !== "object" || Array.isArray(scoped)) {
+    return "operator";
   }
-  return null;
-}
-
-export function getCompanyMemberRoles(): unknown[] {
-  return [];
+  return normalizeHumanRole((scoped as Record<string, unknown>).role, "operator");
 }

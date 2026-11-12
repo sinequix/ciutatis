@@ -1,10 +1,7 @@
-export { companyService } from "./institutionService.js";
 export { companyService } from "./companies.js";
 export { companyArtifactsService } from "./company-artifacts.js";
 export { companySearchService } from "./company-search.js";
-// REMOVED: export { feedbackService } from "./feedback.js";
-// REMOVED: export { companySkillService } from "./company-skills.js";
-// Stub exports for upstream compatibility
+export { feedbackService } from "./feedback.js";
 export { companySkillService } from "./company-skills.js";
 export { agentService, deduplicateAgentName } from "./agents.js";
 export {
@@ -59,7 +56,6 @@ export {
   type ExternalObjectResolverSnapshot,
 } from "./external-objects.js";
 export { goalService } from "./goals.js";
-export { objectiveService } from "./objectiveService.js";
 export { activityService, type ActivityFilters } from "./activity.js";
 export { workTimelineService, normalizeTimelineWindow } from "./work-timeline.js";
 export { attentionService } from "./attention.js";
@@ -74,7 +70,7 @@ export type {
 export { approvalService } from "./approvals.js";
 export { budgetService } from "./budgets.js";
 export { secretService } from "./secrets.js";
-// REMOVED: export { routineService } from "./routines.js";
+export { routineService } from "./routines.js";
 export { costService } from "./costs.js";
 export { financeService } from "./finance.js";
 export { heartbeatService, resolveHeartbeatSchedulingSuppression } from "./heartbeat.js";
@@ -86,11 +82,9 @@ export { classifyIssueGraphLiveness, type IssueLivenessFinding } from "./recover
 export { dashboardService } from "./dashboard.js";
 export { sidebarBadgeService } from "./sidebar-badges.js";
 export { sidebarPreferenceService } from "./sidebar-preferences.js";
-export { accessService } from "./access.js";
-// Stub exports for upstream compatibility - these services are upstream-only
-export { instanceSettingsService } from "./instance-settings.js";
-// REMOVED: export { companyPortabilityService } from "./company-portability.js";
 export { resourceMembershipService, type ResourceMembershipPolicyHook } from "./resource-memberships.js";
+export { inboxDismissalService } from "./inbox-dismissals.js";
+export { accessService } from "./access.js";
 export {
   backfillPrincipalAccessCompatibility,
   ensureHumanRoleDefaultGrants,
@@ -104,6 +98,8 @@ export type {
   AuthorizationDecision,
   AuthorizationResource,
 } from "./authorization.js";
+export { boardAuthService } from "./board-auth.js";
+export { instanceSettingsService } from "./instance-settings.js";
 export { bootstrapExecutionPolicyFromEnv } from "./execution-policy-bootstrap.js";
 export { cloudUpstreamService, reconcileCloudUpstreamRunsOnStartup } from "./cloud-upstreams.js";
 export { companyPortabilityService } from "./company-portability.js";
@@ -141,6 +137,6 @@ export {
 export { reconcilePersistedRuntimeServicesOnStartup, restartDesiredRuntimeServicesOnStartup } from "./workspace-runtime.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
 export { institutionService } from "./institutionService.js";
-// REMOVED: export { issueService as requestService } from "./requestService.js";
+export { objectiveService } from "./objectiveService.js";
 export { issueService as requestService } from "./requestService.js";
 export { publicPortalService } from "./public-portal.js";

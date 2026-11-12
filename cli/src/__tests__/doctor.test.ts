@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { doctor } from "../commands/doctor.js";
 import { writeConfig } from "../config/store.js";
-import type { CiutatisConfig } from "../config/schema.js";
+import type { PaperclipConfig } from "../config/schema.js";
 
 const ORIGINAL_ENV = { ...process.env };
 
@@ -13,7 +13,7 @@ function createTempConfig(): string {
   const configPath = path.join(root, ".paperclip", "config.json");
   const runtimeRoot = path.join(root, "runtime");
 
-  const config: CiutatisConfig = {
+  const config: PaperclipConfig = {
     $meta: {
       version: 1,
       updatedAt: "2026-03-10T00:00:00.000Z",
@@ -45,6 +45,9 @@ function createTempConfig(): string {
     auth: {
       baseUrlMode: "auto",
       disableSignUp: false,
+    },
+    telemetry: {
+      enabled: true,
     },
     storage: {
       provider: "local_disk",

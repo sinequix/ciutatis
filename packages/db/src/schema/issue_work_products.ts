@@ -1,4 +1,3 @@
-export { requestWorkProducts, requestWorkProducts as issueWorkProducts } from "./request_work_products.js";
 import {
   boolean,
   index,
@@ -50,11 +49,18 @@ export const issueWorkProducts = pgTable(
       table.type,
     ),
     companyExecutionWorkspaceTypeIdx: index("issue_work_products_company_execution_workspace_type_idx").on(
+      table.companyId,
       table.executionWorkspaceId,
+      table.type,
+    ),
     companyProviderExternalIdIdx: index("issue_work_products_company_provider_external_id_idx").on(
+      table.companyId,
       table.provider,
       table.externalId,
+    ),
     companyUpdatedIdx: index("issue_work_products_company_updated_idx").on(
+      table.companyId,
       table.updatedAt,
+    ),
   }),
 );
