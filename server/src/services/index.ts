@@ -1,7 +1,5 @@
 export { companyService } from "./institutionService.js";
 export { companySearchService } from "./company-search.js";
-// REMOVED: export { feedbackService } from "./feedback.js";
-// REMOVED: export { companySkillService } from "./company-skills.js";
 // Stub exports for upstream compatibility
 export { companySkillService } from "./company-skills.js";
 export { agentService, deduplicateAgentName } from "./agents.js";
@@ -72,7 +70,6 @@ export type {
 export { approvalService } from "./approvals.js";
 export { budgetService } from "./budgets.js";
 export { secretService } from "./secrets.js";
-// REMOVED: export { routineService } from "./routines.js";
 export { costService } from "./costs.js";
 export { financeService } from "./finance.js";
 export { heartbeatService, resolveHeartbeatSchedulingSuppression } from "./heartbeat.js";
@@ -84,13 +81,10 @@ export { classifyIssueGraphLiveness, type IssueLivenessFinding } from "./recover
 export { dashboardService } from "./dashboard.js";
 export { sidebarBadgeService } from "./sidebar-badges.js";
 export { sidebarPreferenceService } from "./sidebar-preferences.js";
-// REMOVED: export { inboxDismissalService } from "./inbox-dismissals.js";
 export { accessService } from "./access.js";
-// REMOVED: export { boardAuthService } from "./board-auth.js";
 // Stub exports for upstream compatibility - these services are upstream-only
 export { boardAuthService } from "./board-auth.js";
 export { instanceSettingsService } from "./instance-settings.js";
-// REMOVED: export { companyPortabilityService } from "./company-portability.js";
 export { companyPortabilityService } from "./company-portability.js";
 export { teamsCatalogService } from "./teams-catalog.js";
 export { environmentService } from "./environments.js";
@@ -126,6 +120,5 @@ export {
 export { reconcilePersistedRuntimeServicesOnStartup, restartDesiredRuntimeServicesOnStartup } from "./workspace-runtime.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
 export { institutionService } from "./institutionService.js";
-// REMOVED: export { issueService as requestService } from "./requestService.js";
 export { issueService as requestService } from "./requestService.js";
 export { publicPortalService } from "./public-portal.js";
