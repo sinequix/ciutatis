@@ -10,6 +10,7 @@ on:
   pull_request:
     types:
       - opened
+      - synchronize
       - closed
   pull_request_review:
     types:
@@ -55,6 +56,12 @@ jobs:
           fi
 
           echo "clickup_secret=present"
+
+          if [ "${EVENT_ACTION}" = "synchronize" ]; then
+            echo "clickup_update=skipped_synchronize"
+            echo "A new commit does not change ClickUp status."
+            exit 0
+          fi
 
           status=""
           label=""
