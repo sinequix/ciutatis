@@ -3,7 +3,7 @@ name: PR Verify
 on:
   pull_request:
     branches:
-      - master
+      - main
 
 concurrency:
   group: pr-verify-${{ github.event.pull_request.number }}
@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   verify:
-    runs-on: [self-hosted, Linux, X64, ian-hetzner]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
