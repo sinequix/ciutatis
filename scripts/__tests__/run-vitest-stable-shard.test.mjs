@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -60,4 +61,37 @@ test("a route/authz suite never leaks into the general-server shards", () => {
 test("shard flags are rejected for the parallel workspace groups", () => {
   const result = dryRun(["--mode", "general", "--group", "general-workspaces-a", "--shard-index", "0", "--shard-count", "3"]);
   assert.notEqual(result.status, 0, "workspace groups must not accept shard flags");
+});
+
+function workspaceProjectName(dir) {
+  const configPath = path.join(repoRoot, dir, "vitest.config.ts");
+  if (existsSync(configPath)) {
+    const named = readFileSync(configPath, "utf8").match(/name:\s*"([^"]+)"/);
+    if (named) return named[1];
+  }
+
+  const pkg = JSON.parse(readFileSync(path.join(repoRoot, dir, "package.json"), "utf8"));
+  return pkg.name;
+}
+
+function rootVitestProjectDirs() {
+  const config = readFileSync(path.join(repoRoot, "vitest.config.ts"), "utf8");
+  const block = config.match(/projects:\s*\[([\s\S]*?)\]/);
+  assert.ok(block, "root vitest config must declare projects");
+  return [...block[1].matchAll(/"([^"]+)"/g)].map((match) => match[1]);
+}
+
+test("non-server projects match the root vitest workspace", () => {
+  const payload = dryRunJson(["--mode", "general"]);
+  const workspaceProjects = rootVitestProjectDirs()
+    .filter((dir) => dir !== "server")
+    .map((dir) => workspaceProjectName(dir));
+
+  assert.deepEqual(payload.nonServerProjects, workspaceProjects);
+  assert.equal(payload.nonServerProjects.includes("@paperclipai/ui"), false);
+  assert.equal(payload.nonServerProjects.includes("@paperclipai/adapter-cursor-local"), true);
+
+  const grouped = [...payload.generalWorkspacesAProjects, ...payload.generalWorkspacesBProjects];
+  assert.deepEqual(grouped.toSorted(), [...payload.nonServerProjects].toSorted());
+  assert.equal(new Set(grouped).size, grouped.length, "workspace groups must not overlap");
 });
