@@ -3,7 +3,9 @@ name: ClickUp PR status
 # Organization secret CLICKUP_API_TOKEN is read as secrets.CLICKUP_API_TOKEN.
 # The value is never printed. This job does not check out the repository and
 # does not pass the token to a script from the pull request.
-# Fork pull requests do not receive organization secrets; they skip and succeed.
+# A pull request whose head repository is not this repository does not receive
+# organization secrets; it skips and succeeds. This repository is itself a fork,
+# so head.repo.fork is not the signal for that.
 # A missing secret skips and succeeds.
 
 on:
@@ -29,7 +31,7 @@ jobs:
         shell: bash
         env:
           CLICKUP_API_TOKEN: ${{ secrets.CLICKUP_API_TOKEN }}
-          PR_IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           PR_BRANCH: ${{ github.event.pull_request.head.ref }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_URL: ${{ github.event.pull_request.html_url }}
@@ -41,7 +43,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${PR_IS_FORK}" = "true" ]; then
+          if [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
             echo "clickup_secret=unavailable_fork"
             echo "clickup_update=skipped_fork"
             echo "Fork pull request does not receive CLICKUP_API_TOKEN. Skipping."
