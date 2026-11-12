@@ -89,6 +89,13 @@ export {
   TENANT_BOOTSTRAP_STATUSES,
   TENANT_PROVISIONING_JOB_KINDS,
   TENANT_PROVISIONING_JOB_STATUSES,
+  type TenantInstanceStatus,
+  type TenantRoutingMode,
+  type TenantBootstrapStatus,
+  type TenantProvisioningJobKind,
+  type TenantProvisioningJobStatus,
+  type TenantProvisioningJobTrigger,
+  type TenantProvisioningStep,
 } from "./constants.js";
 
 export {

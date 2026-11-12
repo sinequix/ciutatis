@@ -112,6 +112,7 @@ export { secretAccessEvents } from "./secret_access_events.js";
 export { pipelineCases, pipelineCaseIssueLinks, pipelineCaseBlockers, pipelineDocuments, pipelineCaseDocuments, pipelineAutomationExecutions } from "./pipeline_cases.js";
 
 export { issueThreadInteractions } from "./issue_thread_interactions.js";
+export { routines, routineRevisions, routineTriggers, routineRuns } from "./routines.js";
 
 // Stub exports for upstream compatibility - tables intentionally removed from Ciutatis
 // These are minimal table definitions to satisfy upstream type requirements

@@ -27,6 +27,8 @@ import {
 } from "@paperclipai/adapter-claude-local";
 import {
   execute as codexExecute,
+  listCodexSkills,
+  syncCodexSkills,
   testEnvironment as codexTestEnvironment,
   sessionCodec as codexSessionCodec,
   getQuotaWindows as codexGetQuotaWindows,
@@ -56,6 +58,8 @@ import {
 import { agentConfigurationDoc as cursorCloudAgentConfigurationDoc } from "@paperclipai/adapter-cursor-cloud";
 import {
   execute as geminiExecute,
+  listGeminiSkills,
+  syncGeminiSkills,
   testEnvironment as geminiTestEnvironment,
   sessionCodec as geminiSessionCodec,
   getConfigSchema as getGeminiConfigSchema,
@@ -383,40 +387,13 @@ const openCodeLocalAdapter: ServerAdapterModule = {
   models: openCodeModels,
   modelProfiles: openCodeModelProfiles,
   sessionManagement: getAdapterSessionManagement("opencode_local") ?? undefined,
-  listModels: listOpenCodeModelsWithFallback,
+  listModels: listOpenCodeModels,
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: true,
   instructionsPathKey: "instructionsFilePath",
   requiresMaterializedRuntimeSkills: true,
   getRuntimeCommandSpec: (config) => buildNpmRuntimeCommandSpec(config, "opencode", "opencode-ai"),
   agentConfigurationDoc: openCodeAgentConfigurationDoc,
-};
-
-const acpxLocalAdapter: ServerAdapterModule = {
-  type: "acpx_local",
-  execute: async () => {
-    throw new Error("The ACPX local adapter is not available in this Ciutatis build.");
-  },
-  testEnvironment: async () => ({
-    adapterType: "acpx_local",
-    status: "fail",
-    checks: [{
-      code: "acpx_local_unavailable",
-      level: "error",
-      message: "The ACPX local adapter is not available in this Ciutatis build.",
-    }],
-    testedAt: new Date().toISOString(),
-  }),
-  models: dedupeAdapterModels([
-    ...prefixAdapterModelLabels(claudeModels, "Claude"),
-    ...prefixAdapterModelLabels(codexModels, "Codex"),
-  ]),
-  listModels: async () => acpxLocalAdapter.models ?? [],
-  supportsLocalAgentJwt: true,
-  supportsInstructionsBundle: true,
-  instructionsPathKey: "instructionsFilePath",
-  requiresMaterializedRuntimeSkills: true,
-  agentConfigurationDoc: "ACPX local adapter compatibility entry.",
 };
 
 const cloudflareWorkersAiAdapter: ServerAdapterModule = {
@@ -474,6 +451,7 @@ function registerBuiltInAdapters() {
     hermesGatewayAdapter,
     hermesLocalAdapter,
     openclawGatewayAdapter,
+    cloudflareWorkersAiAdapter,
     processAdapter,
     httpAdapter,
   ]) {
@@ -535,7 +513,7 @@ export function findServerAdapter(type: string): ServerAdapterModule | null {
 }
 
 export function findActiveServerAdapter(type: string): ServerAdapterModule | null {
-  if (pausedAdapterOverrides.has(type)) return null;
+  if (pausedOverrides.has(type)) return null;
   return findServerAdapter(type);
 }
 
@@ -591,7 +569,7 @@ export async function listAdapterModels(type: string): Promise<{ id: string; lab
   return adapter.models ?? [];
 }
 
-export async function refreshAdapterModels(type: string): Promise<AdapterModel[]> {
+export async function refreshAdapterModels(type: string): Promise<{ id: string; label: string }[]> {
   const adapter = findActiveServerAdapter(type);
   if (!adapter) return [];
   if (adapter.refreshModels) return adapter.refreshModels();
@@ -620,17 +598,17 @@ export function registerServerAdapter(adapter: ServerAdapterModule): void {
 export function unregisterServerAdapter(type: string): void {
   if (type === processAdapter.type || type === httpAdapter.type) return;
   adaptersByType.delete(type);
-  pausedAdapterOverrides.delete(type);
+  pausedOverrides.delete(type);
 }
 
 export function setOverridePaused(type: string, paused: boolean): void {
   if (paused) {
-    pausedAdapterOverrides.add(type);
+    pausedOverrides.add(type);
   } else {
-    pausedAdapterOverrides.delete(type);
+    pausedOverrides.delete(type);
   }
 }
 
 export function isOverridePaused(type: string): boolean {
-  return pausedAdapterOverrides.has(type);
+  return pausedOverrides.has(type);
 }

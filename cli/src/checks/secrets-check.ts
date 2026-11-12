@@ -59,8 +59,7 @@ export function secretsCheck(config: CiutatisConfig, configPath?: string): Check
       status: "fail",
       message: `${provider} is configured, but this build only supports local_encrypted and aws_secrets_manager`,
       canRepair: false,
-      repairHint: "Run `ciutatis configure --section secrets` and set provider to local_encrypted",
-      repairHint: "Run `paperclipai configure --section secrets` and choose local_encrypted or aws_secrets_manager",
+      repairHint: "Run `ciutatis configure --section secrets` and choose local_encrypted or aws_secrets_manager",
     };
   }
 
