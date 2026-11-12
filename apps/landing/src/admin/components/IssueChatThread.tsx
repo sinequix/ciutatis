@@ -5,7 +5,12 @@ import type { LiveRunForIssue } from "../api/heartbeats";
 import type { IssueChatComment, IssueChatLinkedRun, IssueChatTranscriptEntry } from "../lib/issue-chat-messages";
 import { buildIssueChatMessages } from "../lib/issue-chat-messages";
 import type { IssueTimelineEvent } from "../lib/issue-timeline-events";
+import type { ComposerHandoffPreview } from "../lib/interrupt-handoff";
 import { SUCCESSFUL_RUN_HANDOFF_REQUIRED_NOTICE_BODY } from "../lib/successful-run-handoff";
+
+export function shouldRenderComposerHandoffPreview(body: string, preview: ComposerHandoffPreview): boolean {
+  return Boolean(body.trim()) && preview.kind !== "none";
+}
 
 type IssueChatThreadProps = {
   comments: IssueChatComment[];

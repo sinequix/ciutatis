@@ -1,7 +1,28 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { NavigationType } from "react-router-dom";
 import type { Agent, Issue, IssueTreeControlPreview, IssueTreeHold } from "@paperclipai/shared";
+import type { CurrentBoardAccess } from "../api/access";
+import { canBoardManageRuntime, readRecoveryReconcileWorkspaceId } from "../lib/recovery-reconcile";
 import { useParams } from "@/lib/router";
+
+export { canBoardManageRuntime, readRecoveryReconcileWorkspaceId };
+
+export function canBoardResolveRecoveryAction(
+  companyId: string | null | undefined,
+  boardAccess: CurrentBoardAccess | undefined,
+) {
+  return canBoardManageRuntime(companyId, boardAccess);
+}
+
+export function shouldScrollIssueDetailToTopOnNavigation(input: {
+  previousIssueId: string | undefined;
+  nextIssueId: string | undefined;
+  navigationType: NavigationType;
+}): boolean {
+  if (input.navigationType === NavigationType.Pop) return false;
+  return input.previousIssueId !== input.nextIssueId;
+}
 import { issuesApi } from "../api/issues";
 import { agentsApi } from "../api/agents";
 import { useCompany } from "../context/CompanyContext";
