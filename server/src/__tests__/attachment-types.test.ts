@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
-  parseAllowedTypes,
-  matchesContentType,
   DEFAULT_ALLOWED_TYPES,
+  INLINE_ATTACHMENT_TYPES,
+  isInlineAttachmentContentType,
+  matchesContentType,
+  normalizeContentType,
+  parseAllowedTypes,
 } from "../attachment-types.js";
 
 describe("parseAllowedTypes", () => {

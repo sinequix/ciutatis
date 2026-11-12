@@ -10,7 +10,7 @@ import {
   plugins,
 } from "@paperclipai/db";
 import type {
-  CiutatisPluginManifestV1,
+  PaperclipPluginManifestV1,
   PluginDatabaseCoreReadTable,
   PluginMigrationRecord,
 } from "@paperclipai/shared";
@@ -366,7 +366,7 @@ export function pluginDatabaseService(db: PluginDatabaseRootClient) {
   async function ensureNamespaceWithClient(
     client: PluginDatabaseClient,
     pluginId: string,
-    manifest: CiutatisPluginManifestV1,
+    manifest: PaperclipPluginManifestV1,
   ) {
     if (!manifest.database) return null;
     const namespaceName = derivePluginDatabaseNamespace(
@@ -397,7 +397,7 @@ export function pluginDatabaseService(db: PluginDatabaseRootClient) {
     return rows[0] ?? null;
   }
 
-  async function ensureNamespace(pluginId: string, manifest: CiutatisPluginManifestV1) {
+  async function ensureNamespace(pluginId: string, manifest: PaperclipPluginManifestV1) {
     return ensureNamespaceWithClient(db, pluginId, manifest);
   }
 
@@ -453,7 +453,7 @@ export function pluginDatabaseService(db: PluginDatabaseRootClient) {
       });
     await client
       .update(pluginDatabaseNamespaces)
-      .set({ status: "paused", updatedAt: new Date() })
+      .set({ status: "migration_failed", updatedAt: new Date() })
       .where(eq(pluginDatabaseNamespaces.pluginId, input.pluginId));
   }
 
@@ -462,7 +462,7 @@ export function pluginDatabaseService(db: PluginDatabaseRootClient) {
 
     async applyMigrations(
       pluginId: string,
-      manifest: CiutatisPluginManifestV1,
+      manifest: PaperclipPluginManifestV1,
       packageRoot: string,
       options: ApplyPluginMigrationsOptions = {},
     ) {
@@ -486,7 +486,7 @@ export function pluginDatabaseService(db: PluginDatabaseRootClient) {
             .from(pluginMigrations)
             .where(and(eq(pluginMigrations.pluginId, pluginId), eq(pluginMigrations.migrationKey, migrationKey)))
             .limit(1);
-          const existing = existingRows[0] as unknown as PluginMigrationRecord | undefined;
+          const existing = existingRows[0] as PluginMigrationRecord | undefined;
           if (existing?.status === "applied") {
             if (existing.checksum !== checksum) {
               throw new Error(`Plugin migration checksum mismatch for ${migrationKey}`);

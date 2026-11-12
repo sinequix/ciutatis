@@ -41,6 +41,8 @@ import {
 } from "@paperclipai/adapter-codex-local";
 import {
   execute as cursorExecute,
+  listCursorSkills,
+  syncCursorSkills,
   testEnvironment as cursorTestEnvironment,
   sessionCodec as cursorSessionCodec,
 } from "@paperclipai/adapter-cursor-local/server";
@@ -67,6 +69,7 @@ import {
 import {
   agentConfigurationDoc as geminiAgentConfigurationDoc,
   models as geminiModels,
+  modelProfiles as geminiModelProfiles,
 } from "@paperclipai/adapter-gemini-local";
 import {
   execute as grokExecute,
@@ -85,6 +88,8 @@ import {
 } from "@paperclipai/hermes-paperclip-adapter";
 import {
   execute as openCodeExecute,
+  listOpenCodeSkills,
+  syncOpenCodeSkills,
   testEnvironment as openCodeTestEnvironment,
   sessionCodec as openCodeSessionCodec,
   listOpenCodeModels,
@@ -102,18 +107,12 @@ import {
   agentConfigurationDoc as openclawGatewayAgentConfigurationDoc,
   models as openclawGatewayModels,
 } from "@paperclipai/adapter-openclaw-gateway";
-import {
-  execute as cloudflareWorkersAiExecute,
-  testEnvironment as cloudflareWorkersAiTestEnvironment,
-} from "@ciutatis/adapter-cloudflare-workers-ai/server";
-import {
-  agentConfigurationDoc as cloudflareWorkersAiAgentConfigurationDoc,
-  models as cloudflareWorkersAiModels,
-} from "@ciutatis/adapter-cloudflare-workers-ai";
 import { listCodexModels, refreshCodexModels } from "./codex-models.js";
 import { listCursorModels } from "./cursor-models.js";
 import {
   execute as piExecute,
+  listPiSkills,
+  syncPiSkills,
   testEnvironment as piTestEnvironment,
   sessionCodec as piSessionCodec,
   listPiModels,
@@ -206,7 +205,8 @@ const claudeLocalAdapter: ServerAdapterModule = {
   supportsInstructionsBundle: true,
   instructionsPathKey: "instructionsFilePath",
   requiresMaterializedRuntimeSkills: false,
-  getRuntimeCommandSpec: (config) => buildNpmRuntimeCommandSpec(config, "claude", "@anthropic-ai/claude-code"),
+  getRuntimeCommandSpec: (config) =>
+    buildNpmRuntimeCommandSpec(config, "claude", "@anthropic-ai/claude-code"),
   agentConfigurationDoc: claudeAgentConfigurationDoc,
   getConfigSchema: getClaudeConfigSchema,
   getQuotaWindows: claudeGetQuotaWindows,
@@ -288,6 +288,8 @@ const cursorLocalAdapter: ServerAdapterModule = {
   type: "cursor",
   execute: cursorExecute,
   testEnvironment: cursorTestEnvironment,
+  listSkills: listCursorSkills,
+  syncSkills: syncCursorSkills,
   sessionCodec: cursorSessionCodec,
   sessionManagement: getAdapterSessionManagement("cursor") ?? undefined,
   models: cursorModels,
@@ -333,12 +335,13 @@ const geminiLocalAdapter: ServerAdapterModule = {
   sessionCodec: geminiSessionCodec,
   sessionManagement: getAdapterSessionManagement("gemini_local") ?? undefined,
   models: geminiModels,
-  listModels: async () => geminiModels,
+  modelProfiles: geminiModelProfiles,
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: true,
   instructionsPathKey: "instructionsFilePath",
   requiresMaterializedRuntimeSkills: true,
-  getRuntimeCommandSpec: (config) => buildNpmRuntimeCommandSpec(config, "gemini", "@google/gemini-cli"),
+  getRuntimeCommandSpec: (config) =>
+    buildNpmRuntimeCommandSpec(config, "gemini", "@google/gemini-cli"),
   agentConfigurationDoc: geminiAgentConfigurationDoc,
   getConfigSchema: getGeminiConfigSchema,
 };
@@ -383,6 +386,8 @@ const openCodeLocalAdapter: ServerAdapterModule = {
   type: "opencode_local",
   execute: openCodeExecute,
   testEnvironment: openCodeTestEnvironment,
+  listSkills: listOpenCodeSkills,
+  syncSkills: syncOpenCodeSkills,
   sessionCodec: openCodeSessionCodec,
   models: openCodeModels,
   modelProfiles: openCodeModelProfiles,
@@ -396,23 +401,12 @@ const openCodeLocalAdapter: ServerAdapterModule = {
   agentConfigurationDoc: openCodeAgentConfigurationDoc,
 };
 
-const cloudflareWorkersAiAdapter: ServerAdapterModule = {
-  type: "cloudflare_workers_ai",
-  execute: cloudflareWorkersAiExecute,
-  testEnvironment: cloudflareWorkersAiTestEnvironment,
-  models: cloudflareWorkersAiModels,
-  listModels: async () => cloudflareWorkersAiModels,
-  supportsLocalAgentJwt: false,
-  supportsInstructionsBundle: true,
-  instructionsPathKey: "instructionsFilePath",
-  requiresMaterializedRuntimeSkills: false,
-  agentConfigurationDoc: cloudflareWorkersAiAgentConfigurationDoc,
-};
-
 const piLocalAdapter: ServerAdapterModule = {
   type: "pi_local",
   execute: piExecute,
   testEnvironment: piTestEnvironment,
+  listSkills: listPiSkills,
+  syncSkills: syncPiSkills,
   sessionCodec: piSessionCodec,
   sessionManagement: getAdapterSessionManagement("pi_local") ?? undefined,
   models: [],
@@ -422,7 +416,8 @@ const piLocalAdapter: ServerAdapterModule = {
   supportsInstructionsBundle: true,
   instructionsPathKey: "instructionsFilePath",
   requiresMaterializedRuntimeSkills: true,
-  getRuntimeCommandSpec: (config) => buildNpmRuntimeCommandSpec(config, "pi", "@mariozechner/pi-coding-agent"),
+  getRuntimeCommandSpec: (config) =>
+    buildNpmRuntimeCommandSpec(config, "pi", "@mariozechner/pi-coding-agent"),
   agentConfigurationDoc: piAgentConfigurationDoc,
 };
 
@@ -451,7 +446,6 @@ function registerBuiltInAdapters() {
     hermesGatewayAdapter,
     hermesLocalAdapter,
     openclawGatewayAdapter,
-    cloudflareWorkersAiAdapter,
     processAdapter,
     httpAdapter,
   ]) {
@@ -504,27 +498,83 @@ export function resolveExternalAdapterRegistration(
   };
 }
 
-export function getServerAdapter(type: string): ServerAdapterModule {
-  return adaptersByType.get(type) ?? processAdapter;
+/**
+ * Load external adapters from the plugin store and hardcoded sources.
+ * Called once at module initialization. The promise is exported so that
+ * callers (e.g. assertKnownAdapterType, app startup) can await completion
+ * and avoid racing against the loading window.
+ */
+const externalAdaptersReady: Promise<void> = (async () => {
+  try {
+    const externalAdapters = await buildExternalAdapters();
+    for (const externalAdapter of externalAdapters) {
+      const overriding = BUILTIN_ADAPTER_TYPES.has(externalAdapter.type);
+      if (overriding) {
+        console.log(
+          `[paperclip] External adapter "${externalAdapter.type}" overrides built-in adapter`,
+        );
+        // Save the original builtin for later restoration.
+        const existing = adaptersByType.get(externalAdapter.type);
+        if (existing && !builtinFallbacks.has(externalAdapter.type)) {
+          builtinFallbacks.set(externalAdapter.type, existing);
+        }
+      }
+      adaptersByType.set(
+        externalAdapter.type,
+        resolveExternalAdapterRegistration(externalAdapter),
+      );
+    }
+  } catch (err) {
+    console.error("[paperclip] Failed to load external adapters:", err);
+  }
+})();
+
+/**
+ * Await this before validating adapter types to avoid race conditions
+ * during server startup. External adapters are loaded asynchronously;
+ * calling assertKnownAdapterType before this resolves will reject
+ * valid external adapter types.
+ */
+export function waitForExternalAdapters(): Promise<void> {
+  return externalAdaptersReady;
 }
 
-export function findServerAdapter(type: string): ServerAdapterModule | null {
-  return adaptersByType.get(type) ?? null;
+export function registerServerAdapter(adapter: ServerAdapterModule): void {
+  if (BUILTIN_ADAPTER_TYPES.has(adapter.type) && !builtinFallbacks.has(adapter.type)) {
+    const existing = adaptersByType.get(adapter.type);
+    if (existing) {
+      builtinFallbacks.set(adapter.type, existing);
+    }
+  }
+  adaptersByType.set(adapter.type, adapter);
 }
 
-export function findActiveServerAdapter(type: string): ServerAdapterModule | null {
-  if (pausedOverrides.has(type)) return null;
-  return findServerAdapter(type);
+export function unregisterServerAdapter(type: string): void {
+  if (type === processAdapter.type || type === httpAdapter.type) return;
+  if (builtinFallbacks.has(type)) {
+    pausedOverrides.delete(type);
+    const fallback = builtinFallbacks.get(type);
+    if (fallback) {
+      adaptersByType.set(type, fallback);
+    }
+    return;
+  }
+  if (BUILTIN_ADAPTER_TYPES.has(type)) {
+    return;
+  }
+  adaptersByType.delete(type);
 }
 
 export function requireServerAdapter(type: string): ServerAdapterModule {
   const adapter = findActiveServerAdapter(type);
-  if (!adapter) throw new Error(`Unknown adapter type: ${type}`);
+  if (!adapter) {
+    throw new Error(`Unknown adapter type: ${type}`);
+  }
   return adapter;
 }
 
-export function listServerAdapters(): ServerAdapterModule[] {
-  return Array.from(adaptersByType.values());
+export function getServerAdapter(type: string): ServerAdapterModule {
+  return findActiveServerAdapter(type) ?? processAdapter;
 }
 
 /**
@@ -565,50 +615,120 @@ export async function listAdapterModels(type: string): Promise<{ id: string; lab
   }
   const adapter = findActiveServerAdapter(type);
   if (!adapter) return [];
-  if (adapter.listModels) return adapter.listModels();
+  if (adapter.listModels) {
+    const discovered = await adapter.listModels();
+    if (discovered.length > 0) return discovered;
+  }
   return adapter.models ?? [];
 }
 
 export async function refreshAdapterModels(type: string): Promise<{ id: string; label: string }[]> {
   const adapter = findActiveServerAdapter(type);
   if (!adapter) return [];
-  if (adapter.refreshModels) return adapter.refreshModels();
-  if (adapter.listModels) return adapter.listModels();
+  if (adapter.refreshModels) {
+    const refreshed = await adapter.refreshModels();
+    if (refreshed.length > 0) return refreshed;
+  }
+  if (adapter.listModels) {
+    const discovered = await adapter.listModels();
+    if (discovered.length > 0) return discovered;
+  }
   return adapter.models ?? [];
 }
 
 export async function listAdapterModelProfiles(type: string): Promise<AdapterModelProfileDefinition[]> {
   const adapter = findActiveServerAdapter(type);
   if (!adapter) return [];
+  if (adapter.listModelProfiles) {
+    const discovered = await adapter.listModelProfiles();
+    if (discovered.length > 0) return discovered;
+  }
   return adapter.modelProfiles ?? [];
 }
 
+export function listServerAdapters(): ServerAdapterModule[] {
+  return Array.from(adaptersByType.values());
+}
+
+/**
+ * List adapters excluding those that are disabled in settings.
+ * Used for menus and agent creation flows — disabled adapters remain
+ * functional for existing agents but hidden from selection.
+ */
+export function listEnabledServerAdapters(): ServerAdapterModule[] {
+  const disabled = getDisabledAdapterTypesFromStore();
+  const disabledSet = disabled.length > 0 ? new Set(disabled) : null;
+  return disabledSet
+    ? Array.from(adaptersByType.values()).filter((a) => !disabledSet.has(a.type))
+    : Array.from(adaptersByType.values());
+}
+
 export async function detectAdapterModel(
-  _type: string,
+  type: string,
 ): Promise<{ model: string; provider: string; source: string; candidates?: string[] } | null> {
-  return null;
+  const adapter = findActiveServerAdapter(type);
+  if (!adapter?.detectModel) return null;
+  const detected = await adapter.detectModel();
+  if (!detected) return null;
+  return {
+    model: detected.model,
+    provider: detected.provider,
+    source: detected.source,
+    ...(detected.candidates?.length ? { candidates: detected.candidates } : {}),
+  };
 }
 
-export const waitForExternalAdapters: Promise<void> = Promise.resolve();
+// ---------------------------------------------------------------------------
+// Override pause / resume
+// ---------------------------------------------------------------------------
 
-export function registerServerAdapter(adapter: ServerAdapterModule): void {
-  adaptersByType.set(adapter.type, adapter);
-}
-
-export function unregisterServerAdapter(type: string): void {
-  if (type === processAdapter.type || type === httpAdapter.type) return;
-  adaptersByType.delete(type);
-  pausedOverrides.delete(type);
-}
-
-export function setOverridePaused(type: string, paused: boolean): void {
-  if (paused) {
+/**
+ * Pause or resume an external override for a builtin adapter type.
+ *
+ * - `paused = true`  → subsequent calls to `getServerAdapter(type)` return
+ *   the builtin fallback instead of the external adapter.  Already-running
+ *   agent sessions are unaffected (they hold a reference to the module they
+ *   started with).
+ *
+ * - `paused = false` → the external adapter is active again.
+ *
+ * Returns `true` if the state actually changed, `false` if the type is not
+ * an override or was already in the requested state.
+ */
+export function setOverridePaused(type: string, paused: boolean): boolean {
+  if (!builtinFallbacks.has(type)) return false;
+  const wasPaused = pausedOverrides.has(type);
+  if (paused && !wasPaused) {
     pausedOverrides.add(type);
-  } else {
-    pausedOverrides.delete(type);
+    console.log(`[paperclip] Override paused for "${type}" — builtin adapter restored`);
+    return true;
   }
+  if (!paused && wasPaused) {
+    pausedOverrides.delete(type);
+    console.log(`[paperclip] Override resumed for "${type}" — external adapter active`);
+    return true;
+  }
+  return false;
 }
 
+/** Check whether the external override for a builtin type is currently paused. */
 export function isOverridePaused(type: string): boolean {
   return pausedOverrides.has(type);
+}
+
+/** Get the set of types whose overrides are currently paused. */
+export function getPausedOverrides(): Set<string> {
+  return pausedOverrides;
+}
+
+export function findServerAdapter(type: string): ServerAdapterModule | null {
+  return adaptersByType.get(type) ?? null;
+}
+
+export function findActiveServerAdapter(type: string): ServerAdapterModule | null {
+  if (pausedOverrides.has(type)) {
+    const fallback = builtinFallbacks.get(type);
+    if (fallback) return fallback;
+  }
+  return adaptersByType.get(type) ?? null;
 }

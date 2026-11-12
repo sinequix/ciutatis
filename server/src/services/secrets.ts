@@ -587,8 +587,20 @@ function assertSelectableProviderConfig(config: {
 }
 
 export function secretService(db: Db) {
-  async function getById(id: string) {
-    return db
+  const authorization = authorizationService(db);
+
+  type NormalizeEnvOptions = {
+    strictMode?: boolean;
+    fieldPath?: string;
+  };
+  type NormalizeAdapterConfigOptions = {
+    strictMode?: boolean;
+    adapterType?: string | null;
+    actor?: { userId?: string | null; agentId?: string | null };
+  };
+
+  async function getById(id: string, source: Pick<Db | DbTransaction, "select"> = db) {
+    return source
       .select()
       .from(companySecrets)
       .where(eq(companySecrets.id, id))
@@ -1103,10 +1115,10 @@ export function secretService(db: Db) {
   async function normalizeEnvConfig(
     companyId: string,
     envValue: unknown,
-    opts?: { strictMode?: boolean },
+    opts?: NormalizeEnvOptions,
   ): Promise<AgentEnvConfig> {
     const record = asRecord(envValue);
-    if (!record) throw unprocessable("adapterConfig.env must be an object");
+    if (!record) throw unprocessable(`${opts?.fieldPath ?? "env"} must be an object`);
 
     const normalized: AgentEnvConfig = {};
     for (const [key, rawBinding] of Object.entries(record)) {
@@ -2915,6 +2927,8 @@ export function secretService(db: Db) {
 
     getById,
     getByName,
+    resolveSecretValue,
+    resolveSecretValueForEphemeralAccess,
 
     create: async (
       companyId: string,
@@ -3644,6 +3658,12 @@ export function secretService(db: Db) {
       opts?: NormalizeAdapterConfigOptions,
     ) => normalizeAdapterConfigForPersistenceInternal(companyId, adapterConfig, opts),
 
+    normalizeEnvBindingsForPersistence: async (
+      companyId: string,
+      envValue: unknown,
+      opts?: NormalizeEnvOptions,
+    ) => normalizeEnvConfig(companyId, envValue, opts),
+
     normalizeHireApprovalPayloadForPersistence: async (
       companyId: string,
       payload: Record<string, unknown>,
@@ -3661,28 +3681,11 @@ export function secretService(db: Db) {
       return normalized;
     },
 
-    normalizeEnvBindingsForPersistence: async (
+    resolveEnvBindings: async (
       companyId: string,
       envValue: unknown,
-      opts?: { strictMode?: boolean; fieldPath?: string },
-    ): Promise<Record<string, EnvBinding>> => {
-      const record = asRecord(envValue);
-      if (!record) return {};
-      const normalized: Record<string, EnvBinding> = {};
-      for (const [key, rawBinding] of Object.entries(record)) {
-        if (!ENV_KEY_RE.test(key)) {
-          throw unprocessable(`Invalid environment variable name: ${key}`);
-        }
-        const parsed = envBindingSchema.safeParse(rawBinding);
-        if (!parsed.success) {
-          throw unprocessable(`Invalid environment binding for key: ${key}`);
-        }
-        normalized[key] = parsed.data as EnvBinding;
-      }
-      return normalized;
-    },
-
-    resolveEnvBindings: async (companyId: string, envValue: unknown): Promise<{ env: Record<string, string>; secretKeys: Set<string> }> => {
+      context?: Omit<SecretConsumerContext, "configPath">,
+    ): Promise<{ env: Record<string, string>; secretKeys: Set<string>; manifest: RuntimeSecretManifestEntry[] }> => {
       const record = asRecord(envValue);
       if (!record) return { env: {} as Record<string, string>, secretKeys: new Set<string>(), manifest: [] };
       const resolved: Record<string, string> = {};
@@ -4181,11 +4184,6 @@ export function secretService(db: Db) {
         secretKeys.add(key);
       }
       return { config: resolved, secretKeys, manifest };
-    },
-
-    resolveSecretValue: async (companyId: string, secretRef: string, version: string | number): Promise<string> => {
-      const resolvedVersion = version === "latest" ? "latest" : typeof version === "number" ? version : parseInt(version, 10);
-      return resolveSecretValue(companyId, secretRef, resolvedVersion as number | "latest");
     },
   };
 }

@@ -147,7 +147,7 @@ async function getSandboxProviderConfigSchema(
     db,
     driverKey: provider,
   });
-  const schema = resolved?.driver?.configSchema;
+  const schema = resolved?.driver.configSchema;
   return schema && typeof schema === "object" && !Array.isArray(schema)
     ? schema as Record<string, unknown>
     : null;
@@ -528,7 +528,7 @@ export async function normalizeEnvironmentConfigForPersistence(input: {
         ...validated.normalizedConfig,
       },
       schema:
-        validated.driver?.configSchema && typeof validated.driver.configSchema === "object" && !Array.isArray(validated.driver.configSchema)
+        validated.driver.configSchema && typeof validated.driver.configSchema === "object" && !Array.isArray(validated.driver.configSchema)
           ? validated.driver.configSchema as Record<string, unknown>
           : null,
       actor: input.actor,

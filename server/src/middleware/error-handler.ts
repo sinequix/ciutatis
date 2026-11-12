@@ -1,8 +1,9 @@
 import type { Request, Response, NextFunction } from "express";
 import type { Db } from "@paperclipai/db";
 import { ZodError } from "zod";
-import * as Sentry from "@sentry/node";
 import { HttpError } from "../errors.js";
+import { trackErrorHandlerCrash } from "@paperclipai/shared/telemetry";
+import { getTelemetryClient } from "../telemetry.js";
 import { COMPANY_IMPORT_API_PATH } from "../routes/company-import-paths.js";
 import { logger } from "./logger.js";
 import {
@@ -67,12 +68,6 @@ function recordResponsibleUserDenialFromHttpError(
   });
 }
 
-function shouldExposeTrustedCloudTenantImportError(req: Request) {
-  return req.actor?.source === "cloud_tenant"
-    && req.method === "POST"
-    && req.originalUrl.split("?")[0] === COMPANY_IMPORT_API_PATH;
-}
-
 export function errorHandler(
   err: unknown,
   req: Request,
@@ -91,7 +86,8 @@ export function errorHandler(
         { message: err.message, stack: err.stack, name: err.name, details: err.details },
         err,
       );
-      Sentry.captureException(err);
+      const tc = getTelemetryClient();
+      if (tc) trackErrorHandlerCrash(tc, { errorCode: err.name });
     }
     res.status(err.status).json({
       error: err.message,
@@ -117,10 +113,17 @@ export function errorHandler(
     rootError,
   );
 
-  Sentry.captureException(rootError);
+  const tc = getTelemetryClient();
+  if (tc) trackErrorHandlerCrash(tc, { errorCode: rootError.name });
 
   res.status(500).json({
     error: "Internal server error",
     ...(shouldExposeTrustedCloudTenantImportError(req) ? { message: rootError.message } : {}),
   });
+}
+
+function shouldExposeTrustedCloudTenantImportError(req: Request) {
+  return req.actor?.source === "cloud_tenant"
+    && req.method === "POST"
+    && req.originalUrl.split("?")[0] === COMPANY_IMPORT_API_PATH;
 }

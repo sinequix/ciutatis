@@ -93,7 +93,7 @@ const INVITE_TOKEN_PREFIX = "pcp_invite_";
 const INVITE_TOKEN_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
 const INVITE_TOKEN_SUFFIX_LENGTH = 8;
 const INVITE_TOKEN_MAX_RETRIES = 5;
-const COMPANY_INVITE_TTL_MS = 10 * 60 * 1000;
+const COMPANY_INVITE_TTL_MS = 72 * 60 * 60 * 1000;
 const INVITE_RESOLUTION_DNS_TIMEOUT_MS = 3_000;
 
 type MemberGrantPayload = {
@@ -1826,7 +1826,6 @@ export function buildInviteOnboardingTextDocument(
   };
 
   appendBlock(`
-    # Ciutatis OpenClaw Gateway Onboarding
     # Paperclip Agent Onboarding
 
     This document is meant to be readable by both humans and agents.
@@ -1974,7 +1973,7 @@ export function buildInviteOnboardingTextDocument(
     : [];
 
   if (connectionCandidates.length > 0) {
-    lines.push("## Suggested Ciutatis base URLs to try");
+    lines.push("## Suggested Paperclip base URLs to try");
     for (const candidate of connectionCandidates) {
       lines.push(`- ${candidate}`);
     }
@@ -2914,7 +2913,7 @@ export function accessRoutes(
       throw badRequest("Current board API key context is required");
     }
     const key = await boardAuth.assertCurrentBoardKey(
-      req.actor.keyId!,
+      req.actor.keyId,
       req.actor.userId,
     );
     await boardAuth.revokeBoardApiKey(key.id);
@@ -4729,7 +4728,7 @@ export function accessRoutes(
   router.get("/admin/users", async (req, res) => {
     await assertInstanceAdmin(req);
     const query = searchAdminUsersQuerySchema.parse(req.query);
-    const needle = query.query?.trim().toLowerCase() ?? "";
+    const needle = query.query.trim().toLowerCase();
     const users = await db
       .select({
         id: authUsers.id,

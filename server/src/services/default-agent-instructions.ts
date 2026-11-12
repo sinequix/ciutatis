@@ -1,23 +1,27 @@
-// Stub file for upstream features not in Ciutatis
-// Default agent instructions service
+import fs from "node:fs/promises";
 
-export interface AgentInstructionsBundle {
-  files: Array<{ path: string; content: string }>;
-  entryFile: string;
+const DEFAULT_AGENT_BUNDLE_FILES = {
+  default: ["AGENTS.md"],
+  ceo: ["AGENTS.md", "HEARTBEAT.md", "SOUL.md", "TOOLS.md"],
+} as const;
+
+type DefaultAgentBundleRole = keyof typeof DEFAULT_AGENT_BUNDLE_FILES;
+
+function resolveDefaultAgentBundleUrl(role: DefaultAgentBundleRole, fileName: string) {
+  return new URL(`../onboarding-assets/${role}/${fileName}`, import.meta.url);
 }
 
-export function getDefaultAgentInstructions(): string {
-  return "";
+export async function loadDefaultAgentInstructionsBundle(role: DefaultAgentBundleRole): Promise<Record<string, string>> {
+  const fileNames = DEFAULT_AGENT_BUNDLE_FILES[role];
+  const entries = await Promise.all(
+    fileNames.map(async (fileName) => {
+      const content = await fs.readFile(resolveDefaultAgentBundleUrl(role, fileName), "utf8");
+      return [fileName, content] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
 }
 
-export async function loadDefaultAgentInstructionsBundle(
-  role: string,
-): Promise<AgentInstructionsBundle> {
-  // Ciutatis: no default bundles - agents bring their own instructions
-  return { files: [], entryFile: "AGENTS.md" };
-}
-
-export function resolveDefaultAgentInstructionsBundleRole(agentRole: string): string {
-  // Ciutatis: map agent role to bundle role (simplified)
-  return agentRole;
+export function resolveDefaultAgentInstructionsBundleRole(role: string): DefaultAgentBundleRole {
+  return role === "ceo" ? "ceo" : "default";
 }

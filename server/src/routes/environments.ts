@@ -102,8 +102,9 @@ export function environmentRoutes(
 
   function redactEnvironmentForRestrictedView<T extends {
     config: Record<string, unknown> | null;
-    metadata?: Record<string, unknown> | null;
-  }>(environment: T): T & { configRedacted: true; metadataRedacted: true } {
+    envVars?: Record<string, unknown> | null;
+    metadata: Record<string, unknown> | null;
+  }>(environment: T): T {
     return {
       ...environment,
       config: {},
@@ -240,9 +241,9 @@ export function environmentRoutes(
   function summarizeEnvironmentUpdate(
     patch: Record<string, unknown>,
     environment: {
-      name?: string;
-      driver?: string;
-      status?: string;
+      name: string;
+      driver: string;
+      status: string;
     },
   ): Record<string, unknown> {
     const details: Record<string, unknown> = {
@@ -379,13 +380,15 @@ export function environmentRoutes(
   });
 
   router.get("/companies/:companyId/environments/capabilities", async (req, res) => {
-    const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
-    const pluginDrivers = await listReadyPluginEnvironmentDrivers();
+    assertCanReadInstanceEnvironments(req);
+    const pluginDrivers = await listReadyPluginEnvironmentDrivers({
+      db,
+      workerManager: options.pluginWorkerManager,
+    });
     res.json(getEnvironmentCapabilities(
       AGENT_ADAPTER_TYPES,
       {
-        sandboxProviders: Object.fromEntries((pluginDrivers as Array<{ driverKey: string; displayName: string; description?: string; pluginKey: string; pluginId: string; configSchema?: Record<string, unknown> }>).map((driver) => [
+        sandboxProviders: Object.fromEntries(pluginDrivers.map((driver) => [
           driver.driverKey,
           {
             status: "supported" as const,
@@ -400,11 +403,11 @@ export function environmentRoutes(
             templateConfigBinding: driver.templateConfigBinding,
             supportsTemplateDelete: driver.supportsTemplateDelete,
             displayName: driver.displayName,
-            description: driver.description ?? null,
+            description: driver.description,
             source: "plugin" as const,
             pluginKey: driver.pluginKey,
             pluginId: driver.pluginId,
-            configSchema: driver.configSchema ?? {},
+            configSchema: driver.configSchema,
           },
         ])),
       },
@@ -711,15 +714,7 @@ export function environmentRoutes(
       res.status(404).json({ error: "Environment lease not found" });
       return;
     }
-    if (!lease.companyId) {
-      res.status(400).json({ error: "Lease has no company" });
-      return;
-    }
-    assertCompanyAccess(req, lease.companyId);
-    const canReadConfigs = await actorCanReadEnvironmentConfigurations(req, lease.companyId);
-    if (!canReadConfigs) {
-      throw forbidden("Missing permission: environments:manage");
-    }
+    assertCanReadInstanceEnvironments(req);
     res.json(lease);
   });
 
@@ -952,8 +947,8 @@ export function environmentRoutes(
         config: normalizedConfig,
         envVars: {},
         metadata: req.body.metadata ?? null,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
       };
       const probe = await probeEnvironment(db, environment, {
         companyId,

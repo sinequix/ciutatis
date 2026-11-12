@@ -1,7 +1,4 @@
 /// <reference path="./types/express.d.ts" />
-// IMPORTANT: Sentry must initialize before any other app modules.
-import "./instrument.js";
-import * as Sentry from "@sentry/node";
 // Kicks off the OTel bootstrap as early as possible (no-op unless
 // OTEL_EXPORTER_OTLP_ENDPOINT is set). startServer() awaits
 // instrumentationReady before opening DB connections or constructing the
@@ -18,6 +15,7 @@ import { and, eq } from "drizzle-orm";
 import {
   createDb,
   ensurePostgresDatabase,
+  formatEmbeddedPostgresError,
   getPostgresDataDirectory,
   inspectMigrations,
   applyPendingMigrations,
@@ -48,6 +46,7 @@ import {
   reconcileCloudUpstreamRunsOnStartup,
   reconcileCodexLocalManagedHomesOnStartup,
   reconcilePersistedRuntimeServicesOnStartup,
+  routineService,
 } from "./services/index.js";
 import { resolveWorktreeRunExecutionActivationState } from "./services/instance-settings.js";
 import {
@@ -59,6 +58,9 @@ import { buildRuntimeApiCandidateUrls, choosePrimaryRuntimeApiUrl } from "./runt
 import { createPluginWorkerManager } from "./services/plugin-worker-manager.js";
 import { createStorageServiceFromConfig } from "./storage/index.js";
 import { printStartupBanner } from "./startup-banner.js";
+import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
+import { maybePersistWorktreeRuntimePorts } from "./worktree-config.js";
+import { initTelemetry, getTelemetryClient } from "./telemetry.js";
 import { conflict } from "./errors.js";
 import type {
   InstanceDatabaseBackupRunResult,
@@ -107,6 +109,7 @@ export async function startServer(): Promise<StartedServer> {
   // connection or the HTTP server exists — see instrumentation.ts.
   await instrumentationReady;
   let config = loadConfig();
+  initTelemetry({ enabled: config.telemetryEnabled });
   if (process.env.PAPERCLIP_SECRETS_PROVIDER === undefined) {
     process.env.PAPERCLIP_SECRETS_PROVIDER = config.secretsProvider;
   }
@@ -339,8 +342,10 @@ export async function startServer(): Promise<StartedServer> {
     const dataDir = resolve(config.embeddedPostgresDataDir);
     const configuredPort = config.embeddedPostgresPort;
     let port = configuredPort;
+    const logBuffer = createEmbeddedPostgresLogBuffer(120);
     const verboseEmbeddedPostgresLogs = process.env.PAPERCLIP_EMBEDDED_POSTGRES_VERBOSE === "true";
     const appendEmbeddedPostgresLog = (message: unknown) => {
+      logBuffer.append(message);
       if (!verboseEmbeddedPostgresLogs) {
         return;
       }
@@ -353,6 +358,19 @@ export async function startServer(): Promise<StartedServer> {
         const line = lineRaw.trim();
         if (!line) continue;
         logger.info({ embeddedPostgresLog: line }, "embedded-postgres");
+      }
+    };
+    const logEmbeddedPostgresFailure = (phase: "initialise" | "start", err: unknown) => {
+      const recentLogs = logBuffer.getRecentLogs();
+      if (recentLogs.length > 0) {
+        logger.error(
+          {
+            phase,
+            recentLogs,
+            err,
+          },
+          "Embedded PostgreSQL failed; showing buffered startup logs",
+        );
       }
     };
   
@@ -424,8 +442,11 @@ export async function startServer(): Promise<StartedServer> {
           try {
             await embeddedPostgres.initialise();
           } catch (err) {
-            logger.error({ err }, `Failed to initialize embedded PostgreSQL cluster in ${dataDir} on port ${port}`);
-            throw err;
+            logEmbeddedPostgresFailure("initialise", err);
+            throw formatEmbeddedPostgresError(err, {
+              fallbackMessage: `Failed to initialize embedded PostgreSQL cluster in ${dataDir} on port ${port}`,
+              recentLogs: logBuffer.getRecentLogs(),
+            });
           }
         } else {
           logger.info(`Embedded PostgreSQL cluster already exists (${clusterVersionFile}); skipping init`);
@@ -438,8 +459,11 @@ export async function startServer(): Promise<StartedServer> {
         try {
           await embeddedPostgres.start();
         } catch (err) {
-          logger.error({ err }, `Failed to start embedded PostgreSQL on port ${port}`);
-          throw err;
+          logEmbeddedPostgresFailure("start", err);
+          throw formatEmbeddedPostgresError(err, {
+            fallbackMessage: `Failed to start embedded PostgreSQL on port ${port}`,
+            recentLogs: logBuffer.getRecentLogs(),
+          });
         }
         embeddedPostgresStartedByThisProcess = true;
       }
@@ -544,15 +568,22 @@ export async function startServer(): Promise<StartedServer> {
     betterAuthHandler = createBetterAuthHandler(auth);
     resolveSession = (req) => resolveBetterAuthSession(auth, req);
     resolveSessionFromHeaders = (headers) => resolveBetterAuthSessionFromHeaders(auth, headers);
+    await initializeBoardClaimChallenge(db as any, { deploymentMode: config.deploymentMode });
     authReady = true;
   }
 
   if (resolvedEmbeddedPostgresPort !== null && resolvedEmbeddedPostgresPort !== config.embeddedPostgresPort) {
     config.embeddedPostgresPort = resolvedEmbeddedPostgresPort;
   }
-  const uiMode = config.serveUi ? "static" : "none";
-  const pluginDevWatch = config.uiDevMiddleware;
+  maybePersistWorktreeRuntimePorts({
+    serverPort: listenPort,
+    databasePort: resolvedEmbeddedPostgresPort,
+  });
+  const uiMode = config.uiDevMiddleware ? "vite-dev" : config.serveUi ? "static" : "none";
   const storageService = createStorageServiceFromConfig(config);
+  const feedback = feedbackService(db as any, {
+    shareClient: createFeedbackTraceShareClientFromConfig(config),
+  });
   const backupSettingsSvc = instanceSettingsService(db);
   const databaseBackupMaxAgeHours = Math.max(
     1,
@@ -588,12 +619,7 @@ export async function startServer(): Promise<StartedServer> {
       logger.info({ backupDir: config.databaseBackupDir, trigger }, `${label} database backup starting`);
       // Read retention from Instance Settings (DB) so changes take effect without restart.
       const generalSettings = await backupSettingsSvc.getGeneral();
-      const retentionDays = generalSettings.backupRetention ?? 7;
-      const retention: import("@paperclipai/db").BackupRetentionPolicy = {
-        dailyDays: Math.min(retentionDays, 7),
-        weeklyWeeks: Math.ceil(retentionDays / 7),
-        monthlyMonths: Math.ceil(retentionDays / 30),
-      };
+      const retention = generalSettings.backupRetention;
 
       const result = await runDatabaseBackup({
         connectionString: activeDatabaseConnectionString,
@@ -634,9 +660,9 @@ export async function startServer(): Promise<StartedServer> {
   const pluginWorkerManager = createPluginWorkerManager();
   const app = await createApp(db as any, {
     uiMode,
-    pluginDevWatch,
     serverPort: listenPort,
     storageService,
+    feedbackExportService: feedback,
     databaseBackupService: {
       runManualBackup: async () => {
         const result = await runServerDatabaseBackup("manual");
@@ -1047,7 +1073,7 @@ export async function startServer(): Promise<StartedServer> {
   // Without this, adapter type validation (assertKnownAdapterType) would
   // reject valid external adapter types during the startup loading window.
   const { waitForExternalAdapters } = await import("./adapters/registry.js");
-  await waitForExternalAdapters;
+  await waitForExternalAdapters();
 
   // Reconcile the agent-creation picker to the declaratively-configured adapter
   // set (PAPERCLIP_ADAPTERS). Must run after external adapters are loaded so the
@@ -1084,24 +1110,41 @@ export async function startServer(): Promise<StartedServer> {
           });
       }
         printStartupBanner({
+          bind: config.bind,
           host: config.host,
           deploymentMode: config.deploymentMode,
-          deploymentExposure: config.deploymentExposure,
-          authReady,
-          requestedPort: requestedListenPort,
-          listenPort,
-          uiMode,
-          db: startupDbInfo,
-          migrationSummary,
-          heartbeatSchedulerEnabled: config.heartbeatSchedulerEnabled,
-          heartbeatSchedulerIntervalMs: config.heartbeatSchedulerIntervalMs,
-          databaseBackupEnabled: config.databaseBackupEnabled,
-          databaseBackupIntervalMinutes: config.databaseBackupIntervalMinutes,
-          databaseBackupRetentionDays: config.databaseBackupRetentionDays,
-          databaseBackupDir: config.databaseBackupDir,
-        });
+        deploymentExposure: config.deploymentExposure,
+        authReady,
+        requestedPort: requestedListenPort,
+        listenPort,
+        uiMode,
+        db: startupDbInfo,
+        migrationSummary,
+        heartbeatSchedulerEnabled: config.heartbeatSchedulerEnabled,
+        heartbeatSchedulerIntervalMs: config.heartbeatSchedulerIntervalMs,
+        databaseBackupEnabled: config.databaseBackupEnabled,
+        databaseBackupIntervalMinutes: config.databaseBackupIntervalMinutes,
+        databaseBackupRetentionDays: config.databaseBackupRetentionDays,
+        databaseBackupDir: config.databaseBackupDir,
+      });
 
-        resolveListen();
+      const boardClaimUrl = getBoardClaimWarningUrl(config.host, listenPort);
+      if (boardClaimUrl) {
+        const red = "\x1b[41m\x1b[30m";
+        const yellow = "\x1b[33m";
+        const reset = "\x1b[0m";
+        console.log(
+          [
+            `${red}  BOARD CLAIM REQUIRED  ${reset}`,
+            `${yellow}This instance was previously local_trusted and still has local-board as the only admin.${reset}`,
+            `${yellow}Sign in with a real user and open this one-time URL to claim ownership:${reset}`,
+            `${yellow}${boardClaimUrl}${reset}`,
+            `${yellow}If you are connecting over Tailscale, replace the host in this URL with your Tailscale IP/MagicDNS name.${reset}`,
+          ].join("\n"),
+        );
+      }
+
+      resolveListen();
     });
   });
   
@@ -1144,7 +1187,6 @@ export async function startServer(): Promise<StartedServer> {
       // Flush buffered OTel spans before the process goes away; without this
       // await the exporter's final batch is dropped on exit.
       await shutdownInstrumentation();
-      await Sentry.flush(2_000);
 
       process.exit(0);
     };

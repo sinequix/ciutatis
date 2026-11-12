@@ -1,5 +1,6 @@
-import { Router } from "express";
-import type { Db } from "@paperclipai/db";
+import { Router, type Request } from "express";
+import { eq } from "drizzle-orm";
+import { heartbeatRuns, type Db } from "@paperclipai/db";
 import {
   addApprovalCommentSchema,
   createApprovalSchema,
@@ -20,7 +21,6 @@ import {
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
 import { redactEventPayload } from "../redaction.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
-import { notFound } from "../errors.js";
 
 function redactApprovalPayload<T extends { payload: Record<string, unknown> }>(approval: T): T {
   return {
@@ -53,15 +53,55 @@ export function approvalRoutes(
   const secretsSvc = secretService(db);
   const strictSecretsMode = process.env.PAPERCLIP_SECRETS_STRICT_MODE === "true";
 
-  async function assertDecisionAccess(req: Parameters<typeof assertBoard>[0], approvalId: string) {
-    const approval = await svc.getById(approvalId);
-    if (!approval) throw notFound("Approval not found");
+  async function requireApprovalAccess(req: Request, id: string) {
+    const approval = await svc.getById(id);
+    if (!approval) {
+      return null;
+    }
     assertCompanyAccess(req, approval.companyId);
     return approval;
   }
 
-  function decisionUserId(req: Parameters<typeof assertBoard>[0]): string {
-    return req.actor.userId ?? "board";
+  async function assertApprovalAccessAllowed(req: Request, res: any, companyId: string) {
+    const decision = await access.decide({
+      actor: req.actor,
+      action: "company_scope:read",
+      resource: { type: "company", companyId },
+    });
+    if (decision.allowed) return true;
+    res.status(403).json({ error: "Approvals are outside this actor's authorization boundary" });
+    return false;
+  }
+
+  async function assertApprovalMutationAllowedByRunContext(req: Request, res: any, companyId: string) {
+    if (req.actor.type !== "agent") return true;
+    const runId = req.actor.runId?.trim();
+    if (!runId || !req.actor.agentId) return true;
+
+    const run = await db
+      .select({
+        id: heartbeatRuns.id,
+        companyId: heartbeatRuns.companyId,
+        agentId: heartbeatRuns.agentId,
+        contextSnapshot: heartbeatRuns.contextSnapshot,
+      })
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.id, runId))
+      .then((rows) => rows[0] ?? null);
+    if (!run || run.companyId !== companyId || run.agentId !== req.actor.agentId) return true;
+    if (!isStatusOnlyCheapRecoveryContext(run.contextSnapshot)) return true;
+
+    res.status(403).json({
+      error: "Cheap status-only recovery runs cannot create or modify approvals",
+      details: {
+        companyId,
+        runId: run.id,
+        modelProfile: "cheap",
+        recoveryIntent: "status_only",
+        resumeRequiresNormalModel: true,
+      },
+    });
+    return false;
   }
 
   router.get("/companies/:companyId/approvals", async (req, res) => {
@@ -156,12 +196,12 @@ export function approvalRoutes(
   router.post("/approvals/:id/approve", validate(resolveApprovalSchema), async (req, res) => {
     assertBoard(req);
     const id = req.params.id as string;
-    await assertDecisionAccess(req, id);
-    const { approval, applied } = await svc.approve(
-      id,
-      decisionUserId(req),
-      req.body.decisionNote,
-    );
+    if (!(await requireApprovalAccess(req, id))) {
+      res.status(404).json({ error: "Approval not found" });
+      return;
+    }
+    const decidedByUserId = req.actor.userId ?? "board";
+    const { approval, applied } = await svc.approve(id, decidedByUserId, req.body.decisionNote);
 
     if (applied) {
       const linkedIssues = await issueApprovalsSvc.listIssuesForApproval(approval.id);
@@ -252,12 +292,12 @@ export function approvalRoutes(
   router.post("/approvals/:id/reject", validate(resolveApprovalSchema), async (req, res) => {
     assertBoard(req);
     const id = req.params.id as string;
-    await assertDecisionAccess(req, id);
-    const { approval, applied } = await svc.reject(
-      id,
-      decisionUserId(req),
-      req.body.decisionNote,
-    );
+    if (!(await requireApprovalAccess(req, id))) {
+      res.status(404).json({ error: "Approval not found" });
+      return;
+    }
+    const decidedByUserId = req.actor.userId ?? "board";
+    const { approval, applied } = await svc.reject(id, decidedByUserId, req.body.decisionNote);
 
     if (applied) {
       await logActivity(db, {
@@ -280,12 +320,12 @@ export function approvalRoutes(
     async (req, res) => {
       assertBoard(req);
       const id = req.params.id as string;
-      await assertDecisionAccess(req, id);
-      const approval = await svc.requestRevision(
-        id,
-        decisionUserId(req),
-        req.body.decisionNote,
-      );
+      if (!(await requireApprovalAccess(req, id))) {
+        res.status(404).json({ error: "Approval not found" });
+        return;
+      }
+      const decidedByUserId = req.actor.userId ?? "board";
+      const approval = await svc.requestRevision(id, decidedByUserId, req.body.decisionNote);
 
       await logActivity(db, {
         companyId: approval.companyId,

@@ -40,7 +40,7 @@ import type { Db } from "@paperclipai/db";
 import type {
   PluginStatus,
   PluginRecord,
-  CiutatisPluginManifestV1,
+  PaperclipPluginManifestV1,
 } from "@paperclipai/shared";
 import { pluginRegistryService } from "./plugin-registry.js";
 import { pluginLoader, type PluginLoader } from "./plugin-loader.js";

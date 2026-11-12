@@ -1,11 +1,10 @@
 /**
  * Shared attachment content-type configuration.
  *
- * By default only image types are allowed.  Set the
  * By default a curated set of image/document/text/media types are allowed. Set the
  * `PAPERCLIP_ALLOWED_ATTACHMENT_TYPES` environment variable to a
  * comma-separated list of MIME types or wildcard patterns to expand the
- * allowed set.
+ * allowed set for routes that use this allowlist.
  *
  * Examples:
  *   PAPERCLIP_ALLOWED_ATTACHMENT_TYPES=image/*,application/pdf
@@ -15,9 +14,10 @@
  *   - Exact types:   "application/pdf"
  *   - Wildcards:     "image/*"  or  "application/vnd.openxmlformats-officedocument.*"
  */
-// Attachment size limits - defined locally (removed from shared in ciutatis fork)
-const DEFAULT_COMPANY_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024; // 10 MB
-const MAX_COMPANY_ATTACHMENT_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+import {
+  DEFAULT_COMPANY_ATTACHMENT_MAX_BYTES,
+  MAX_COMPANY_ATTACHMENT_MAX_BYTES,
+} from "@paperclipai/shared";
 
 export const DEFAULT_ALLOWED_TYPES: readonly string[] = [
   "image/png",
@@ -81,6 +81,15 @@ export function matchesContentType(contentType: string, allowedPatterns: string[
     }
     return ct === pattern;
   });
+}
+
+export function normalizeContentType(contentType: string | null | undefined): string {
+  const normalized = (contentType ?? "").trim().toLowerCase();
+  return normalized || DEFAULT_ATTACHMENT_CONTENT_TYPE;
+}
+
+export function isInlineAttachmentContentType(contentType: string): boolean {
+  return matchesContentType(contentType, [...INLINE_ATTACHMENT_TYPES]);
 }
 
 // ---------- Module-level singletons read once at startup ----------

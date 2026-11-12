@@ -208,14 +208,14 @@ export type ExecutionWorkspaceEnvironmentResolution = {
 
 export function resolveExecutionWorkspaceEnvironmentId(input: {
   agentDefaultEnvironmentId: string | null;
-  defaultEnvironmentId: string;
-}) {
-  if (input.workspaceConfig?.environmentId !== undefined) {
-    return input.workspaceConfig.environmentId ?? input.defaultEnvironmentId;
-  }
-  const issueSettingsEnvId = (input.issueSettings as { environmentId?: string | null } | null)?.environmentId;
-  if (issueSettingsEnvId !== undefined) {
-    return issueSettingsEnvId ?? input.defaultEnvironmentId;
+  instanceDefaultEnvironmentId: string | null;
+  localDefaultEnvironmentId: string;
+}): ExecutionWorkspaceEnvironmentResolution {
+  if (input.agentDefaultEnvironmentId) {
+    return {
+      environmentId: input.agentDefaultEnvironmentId,
+      source: "agent",
+    };
   }
   if (input.instanceDefaultEnvironmentId) {
     return {
@@ -243,6 +243,21 @@ export function defaultIssueExecutionWorkspaceSettingsForProject(
             ? "agent_default"
             : "shared_workspace",
   };
+}
+
+export function issueExecutionWorkspaceModeForPersistedWorkspace(
+  mode: string | null | undefined,
+): IssueExecutionWorkspaceSettings["mode"] {
+  if (mode === null || mode === undefined) {
+    return "agent_default";
+  }
+  if (mode === "isolated_workspace" || mode === "operator_branch" || mode === "shared_workspace") {
+    return mode;
+  }
+  if (mode === "adapter_managed" || mode === "cloud_sandbox") {
+    return "agent_default";
+  }
+  return "shared_workspace";
 }
 
 export function resolveExecutionWorkspaceMode(input: {
@@ -304,14 +319,4 @@ export function buildExecutionWorkspaceAdapterConfig(input: {
   }
 
   return nextConfig;
-}
-
-// Stub for upstream feature not used in ciutatis
-export function issueExecutionWorkspaceModeForPersistedWorkspace(
-  mode: string | null | undefined,
-): "agent_default" | "isolated_workspace" | "operator_branch" | "shared_workspace" {
-  if (mode === "isolated_workspace" || mode === "operator_branch" || mode === "shared_workspace") {
-    return mode;
-  }
-  return "agent_default";
 }

@@ -1,34 +1,88 @@
-// Stub file for upstream features not in Ciutatis
-// Join request dedupe lib
+import { joinRequests } from "@paperclipai/db";
 
-export interface JoinRequestRow {
-  id: string;
-  inviteId?: string | null;
-  status: string;
-  requestingUserId: string | null;
-  requestEmailSnapshot: string | null;
-  approvedByUserId?: string | null;
-  rejectedByUserId?: string | null;
-  createdAt?: Date;
-  requestType?: string;
+type JoinRequestLike = Pick<
+  typeof joinRequests.$inferSelect,
+  | "id"
+  | "requestType"
+  | "status"
+  | "requestingUserId"
+  | "requestEmailSnapshot"
+  | "createdAt"
+  | "updatedAt"
+>;
+
+function nonEmptyTrimmed(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : null;
 }
 
-export function collapseDuplicatePendingHumanJoinRequests<T extends JoinRequestRow>(
-  rows: T[],
-): T[] {
-  // Ciutatis: no deduplication logic needed for simplified join flow
-  return rows;
+export function normalizeJoinRequestEmail(
+  email: string | null | undefined
+): string | null {
+  const trimmed = nonEmptyTrimmed(email);
+  return trimmed ? trimmed.toLowerCase() : null;
 }
 
-export function findReusableHumanJoinRequest<T extends JoinRequestRow>(
+export function humanJoinRequestIdentity(
+  row: Pick<
+    JoinRequestLike,
+    "requestType" | "requestingUserId" | "requestEmailSnapshot"
+  >
+): string | null {
+  if (row.requestType !== "human") return null;
+  const requestingUserId = nonEmptyTrimmed(row.requestingUserId);
+  if (requestingUserId) return `user:${requestingUserId}`;
+  const email = normalizeJoinRequestEmail(row.requestEmailSnapshot);
+  return email ? `email:${email}` : null;
+}
+
+export function findReusableHumanJoinRequest<
+  T extends Pick<
+    JoinRequestLike,
+    "id" | "requestType" | "status" | "requestingUserId" | "requestEmailSnapshot"
+  >,
+>(
   rows: T[],
-  criteria: {
-    requestingUserId: string | null;
-    requestEmailSnapshot: string | null;
-  },
+  actor: { requestingUserId?: string | null; requestEmailSnapshot?: string | null }
 ): T | null {
-  // Ciutatis: simplified - no reuse logic
-  return null;
+  const actorUserId = nonEmptyTrimmed(actor.requestingUserId);
+  if (actorUserId) {
+    const sameUser = rows.find(
+      (row) =>
+        row.requestType === "human" &&
+        (row.status === "pending_approval" || row.status === "approved") &&
+        row.requestingUserId === actorUserId
+    );
+    if (sameUser) return sameUser;
+  }
+
+  const actorEmail = normalizeJoinRequestEmail(actor.requestEmailSnapshot);
+  if (!actorEmail) return null;
+  return (
+    rows.find(
+      (row) =>
+        row.requestType === "human" &&
+        (row.status === "pending_approval" || row.status === "approved") &&
+        normalizeJoinRequestEmail(row.requestEmailSnapshot) === actorEmail
+    ) ?? null
+  );
 }
 
-export function dedupeJoinRequests(): void {}
+export function collapseDuplicatePendingHumanJoinRequests<
+  T extends Pick<
+    JoinRequestLike,
+    "id" | "requestType" | "status" | "requestingUserId" | "requestEmailSnapshot"
+  >,
+>(rows: T[]): T[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    if (row.requestType !== "human" || row.status !== "pending_approval") {
+      return true;
+    }
+    const identity = humanJoinRequestIdentity(row);
+    if (!identity) return true;
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+}

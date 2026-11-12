@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { institutionService } from "../services/institutionService.ts";
+import { companyService } from "../services/companies.ts";
 import { agentService } from "../services/agents.ts";
 
-function createSelectSequenceDb(results: unknown[][]) {
-  const pending: unknown[][] = [...results];
+function createSelectSequenceDb(results: unknown[]) {
+  const pending = [...results];
   const chain = {
     from: vi.fn(() => chain),
     where: vi.fn(() => chain),
@@ -28,7 +28,7 @@ describe("monthly spend hydration", () => {
     const dbStub = createSelectSequenceDb([
       [{
         id: "company-1",
-        name: "Ciutatis",
+        name: "Paperclip",
         description: null,
         status: "active",
         issuePrefix: "PAP",
@@ -47,10 +47,10 @@ describe("monthly spend hydration", () => {
       }],
     ]);
 
-    const institutions = institutionService(dbStub.db as any);
-    const [institution] = await institutions.list();
+    const companies = companyService(dbStub.db as any);
+    const [company] = await companies.list();
 
-    expect(institution.spentMonthlyCents).toBe(420);
+    expect(company.spentMonthlyCents).toBe(420);
   });
 
   it("recomputes agent spentMonthlyCents from the current utc month instead of returning stale stored values", async () => {

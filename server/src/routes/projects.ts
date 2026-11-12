@@ -177,11 +177,11 @@ export function projectRoutes(db: Db) {
       ],
     );
     if (projectData.env !== undefined) {
-      projectData.env = (await secretsSvc.normalizeEnvBindingsForPersistence(
+      projectData.env = await secretsSvc.normalizeEnvBindingsForPersistence(
         companyId,
         projectData.env,
         { strictMode: strictSecretsMode, fieldPath: "env" },
-      )) as Record<string, string>;
+      );
     }
     const project = await svc.create(companyId, projectData);
     if (project.env) {
@@ -218,6 +218,10 @@ export function projectRoutes(db: Db) {
         envKeys: project.env ? Object.keys(project.env).sort() : [],
       },
     });
+    const telemetryClient = getTelemetryClient();
+    if (telemetryClient) {
+      trackProjectCreated(telemetryClient);
+    }
     res.status(201).json(hydratedProject ?? project);
   });
 
@@ -410,8 +414,7 @@ export function projectRoutes(db: Db) {
 
     await assertCanManageProjectWorkspaceRuntimeServices(db, req, {
       companyId: project.companyId,
-      executionWorkspaceId: workspace.id,
-      sourceIssueId: null,
+      projectWorkspaceId: workspace.id,
     });
 
     const workspaceCwd = workspace.cwd;
@@ -420,11 +423,11 @@ export function projectRoutes(db: Db) {
       return;
     }
 
-    const runtimeConfig = (workspace.runtimeConfig?.workspaceRuntime ?? null) as Record<string, unknown> | null;
+    const runtimeConfig = workspace.runtimeConfig?.workspaceRuntime ?? null;
     const target = req.body as { workspaceCommandId?: string | null; runtimeServiceId?: string | null; serviceIndex?: number | null };
     const configuredServices = runtimeConfig ? listConfiguredRuntimeServiceEntries({ workspaceRuntime: runtimeConfig }) : [];
     const workspaceCommand = runtimeConfig
-      ? findWorkspaceCommandDefinition(runtimeConfig as Record<string, unknown>, target.workspaceCommandId ?? null)
+      ? findWorkspaceCommandDefinition(runtimeConfig, target.workspaceCommandId ?? null)
       : null;
     if (target.workspaceCommandId && !workspaceCommand) {
       res.status(404).json({ error: "Workspace command not found for this project workspace" });
@@ -514,7 +517,7 @@ export function projectRoutes(db: Db) {
               warnings: [],
               created: false,
             },
-            command: workspaceCommand.rawConfig ?? {} as Record<string, unknown>,
+            command: workspaceCommand.rawConfig,
             adapterEnv: {},
             recorder,
             metadata: {
@@ -580,7 +583,7 @@ export function projectRoutes(db: Db) {
         }
 
         const currentDesiredState: WorkspaceRuntimeDesiredState =
-          ((workspace.runtimeConfig as Record<string, unknown> | null | undefined)?.desiredState as WorkspaceRuntimeDesiredState | undefined)
+          workspace.runtimeConfig?.desiredState
           ?? ((workspace.runtimeServices ?? []).some((service) => service.status === "starting" || service.status === "running")
             ? "running"
             : "stopped");
@@ -590,12 +593,12 @@ export function projectRoutes(db: Db) {
         } = selectedRuntimeServiceId && (selectedServiceIndex === undefined || selectedServiceIndex === null)
           ? {
               desiredState: currentDesiredState,
-              serviceStates: ((workspace.runtimeConfig as Record<string, unknown> | null | undefined)?.serviceStates as WorkspaceRuntimeServiceStateMap | null | undefined) ?? null,
+              serviceStates: workspace.runtimeConfig?.serviceStates ?? null,
             }
           : buildWorkspaceRuntimeDesiredStatePatch({
               config: { workspaceRuntime: runtimeConfig },
               currentDesiredState,
-              currentServiceStates: ((workspace.runtimeConfig as Record<string, unknown> | null | undefined)?.serviceStates as WorkspaceRuntimeServiceStateMap | null | undefined) ?? null,
+              currentServiceStates: workspace.runtimeConfig?.serviceStates ?? null,
               action,
               serviceIndex: selectedServiceIndex,
             });
