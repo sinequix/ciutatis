@@ -21,7 +21,7 @@ permissions:
 jobs:
   sync:
     name: ClickUp PR status
-    runs-on: [self-hosted, Linux, X64, ian-hetzner]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Update ClickUp task or skip
