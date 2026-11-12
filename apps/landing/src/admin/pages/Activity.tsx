@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ActivityEvent, Agent } from "@paperclipai/shared";
 import { activityApi } from "../api/activity";
-import { accessApi } from "../api/access";
 import { agentsApi } from "../api/agents";
-import { buildCompanyUserProfileMap } from "../lib/company-members";
+import { issuesApi } from "../api/issues";
+import { projectsApi } from "../api/projects";
+import { goalsApi } from "../api/goals";
 import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
@@ -19,30 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { History } from "lucide-react";
-import { Card } from "@/components/ui/card";
-
-const ACTIVITY_PAGE_LIMIT = 200;
-
-function detailString(event: ActivityEvent, ...keys: string[]) {
-  const details = event.details;
-  for (const key of keys) {
-    const value = details?.[key];
-    if (typeof value === "string" && value.trim()) return value;
-  }
-  return null;
-}
-
-function activityEntityName(event: ActivityEvent) {
-  if (event.entityType === "issue") return detailString(event, "identifier", "issueIdentifier");
-  if (event.entityType === "project") return detailString(event, "projectName", "name", "title");
-  if (event.entityType === "goal") return detailString(event, "goalTitle", "title", "name");
-  return detailString(event, "name", "title");
-}
-
-function activityEntityTitle(event: ActivityEvent) {
-  if (event.entityType === "issue") return detailString(event, "issueTitle", "title");
-  return null;
-}
+import type { Agent } from "@paperclipai/shared";
 
 export function Activity() {
   const { selectedCompanyId } = useCompany();
@@ -54,8 +31,8 @@ export function Activity() {
   }, [setBreadcrumbs]);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: [...queryKeys.activity(selectedCompanyId!), { limit: ACTIVITY_PAGE_LIMIT }],
-    queryFn: () => activityApi.list(selectedCompanyId!, { limit: ACTIVITY_PAGE_LIMIT }),
+    queryKey: queryKeys.activity(selectedCompanyId!),
+    queryFn: () => activityApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
 
@@ -65,16 +42,23 @@ export function Activity() {
     enabled: !!selectedCompanyId,
   });
 
-  const { data: companyMembers } = useQuery({
-    queryKey: queryKeys.access.companyUserDirectory(selectedCompanyId!),
-    queryFn: () => accessApi.listUserDirectory(selectedCompanyId!),
+  const { data: issues } = useQuery({
+    queryKey: queryKeys.issues.list(selectedCompanyId!),
+    queryFn: () => issuesApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
   });
 
-  const userProfileMap = useMemo(
-    () => buildCompanyUserProfileMap(companyMembers?.users),
-    [companyMembers?.users],
-  );
+  const { data: projects } = useQuery({
+    queryKey: queryKeys.projects.list(selectedCompanyId!),
+    queryFn: () => projectsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
+
+  const { data: goals } = useQuery({
+    queryKey: queryKeys.goals.list(selectedCompanyId!),
+    queryFn: () => goalsApi.list(selectedCompanyId!),
+    enabled: !!selectedCompanyId,
+  });
 
   const agentMap = useMemo(() => {
     const map = new Map<string, Agent>();
@@ -84,22 +68,18 @@ export function Activity() {
 
   const entityNameMap = useMemo(() => {
     const map = new Map<string, string>();
+    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.identifier ?? i.id.slice(0, 8));
     for (const a of agents ?? []) map.set(`agent:${a.id}`, a.name);
-    for (const event of data ?? []) {
-      const name = activityEntityName(event);
-      if (name) map.set(`${event.entityType}:${event.entityId}`, name);
-    }
+    for (const p of projects ?? []) map.set(`project:${p.id}`, p.name);
+    for (const g of goals ?? []) map.set(`goal:${g.id}`, g.title);
     return map;
-  }, [data, agents]);
+  }, [issues, agents, projects, goals]);
 
   const entityTitleMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const event of data ?? []) {
-      const title = activityEntityTitle(event);
-      if (title) map.set(`${event.entityType}:${event.entityId}`, title);
-    }
+    for (const i of issues ?? []) map.set(`issue:${i.id}`, i.title);
     return map;
-  }, [data]);
+  }, [issues]);
 
   if (!selectedCompanyId) {
     return <EmptyState icon={History} message="Select a company to view activity." />;
@@ -149,7 +129,6 @@ export function Activity() {
               key={event.id}
               event={event}
               agentMap={agentMap}
-              userProfileMap={userProfileMap}
               entityNameMap={entityNameMap}
               entityTitleMap={entityTitleMap}
             />

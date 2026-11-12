@@ -33,7 +33,17 @@ import {
 } from "../hooks/useResourceMemberships";
 import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
 
-import { getAdapterLabel } from "../adapters/adapter-display-registry";
+const adapterLabels: Record<string, string> = {
+  cloudflare_workers_ai: "Cloudflare",
+  claude_local: "Claude",
+  codex_local: "Codex",
+  gemini_local: "Gemini",
+  opencode_local: "OpenCode",
+  cursor: "Cursor",
+  openclaw_gateway: "OpenClaw Gateway",
+  process: "Process",
+  http: "HTTP",
+};
 
 const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
 
@@ -91,98 +101,25 @@ function matchesFilter(status: string, tab: FilterTab): boolean {
   return true;
 }
 
-function filterAgents(agents: Agent[], tab: FilterTab, builtInAgentIds: Set<string>): Agent[] {
-  return agents
-    .filter((a) => {
-      if (HIDDEN_AGENT_STATUSES.has(a.status)) return false;
-      // The `builtin` filter keys on the built-in marker, not agent status.
-      if (tab === "builtin") return builtInAgentIds.has(a.id);
-      return matchesFilter(a.status, tab);
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+function filterAgents(agents: Agent[], tab: FilterTab, showTerminated: boolean): Agent[] {
+  return agents.filter((a) => matchesFilter(a.status, tab, showTerminated));
 }
 
-function getConfiguredModel(agent: Agent): string | null {
-  const value = agent.adapterConfig?.model;
-  if (typeof value !== "string") return null;
-  const model = value.trim();
-  return model.length > 0 ? model : null;
+function filterOrgTree(nodes: OrgNode[], tab: FilterTab, showTerminated: boolean): OrgNode[] {
+  return nodes.reduce<OrgNode[]>((acc, node) => {
+    const filteredReports = filterOrgTree(node.reports, tab, showTerminated);
+    if (matchesFilter(node.status, tab, showTerminated) || filteredReports.length > 0) {
+      acc.push({ ...node, reports: filteredReports });
+    }
+    return acc;
+  }, []);
 }
 
-function formatEnvironmentDriver(driver: Environment["driver"]): string {
-  if (driver === "ssh") return "SSH";
-  return driver.charAt(0).toUpperCase() + driver.slice(1);
-}
-
-function getSandboxProviderLabel(
-  environment: Environment,
-  capabilities?: EnvironmentCapabilities | null,
-): string {
-  const provider = typeof environment.config.provider === "string"
-    ? environment.config.provider.trim()
-    : "";
-  if (!provider) return "Sandbox";
-  return capabilities?.sandboxProviders?.[provider]?.displayName ?? provider;
-}
-
-function describeEnvironment(
-  environment: Environment,
-  capabilities?: EnvironmentCapabilities | null,
-): EnvironmentDescriptor {
-  const detail = environment.driver === "sandbox"
-    ? `${getSandboxProviderLabel(environment, capabilities)} sandbox provider`
-    : environment.driver === "local"
-      ? "Paperclip host"
-      : formatEnvironmentDriver(environment.driver);
-
-  return {
-    label: environment.name,
-    detail,
-    title: `${environment.name} - ${detail}`,
-  };
-}
-
-function describeMissingEnvironment(environmentId: string): EnvironmentDescriptor {
-  return {
-    label: "Unknown environment",
-    detail: environmentId.slice(0, 8),
-    title: `Unknown environment - ${environmentId}`,
-  };
-}
-
-function resolveAgentEnvironment(
-  agent: Agent,
-  environmentsById: Map<string, Environment>,
-  instanceDefaultEnvironmentId: string | null,
-  capabilities?: EnvironmentCapabilities | null,
-): EnvironmentDescriptor {
-  const environmentId = agent.defaultEnvironmentId ?? instanceDefaultEnvironmentId;
-  if (!environmentId) return localEnvironmentDescriptor;
-  const environment = environmentsById.get(environmentId);
-  return environment
-    ? describeEnvironment(environment, capabilities)
-    : describeMissingEnvironment(environmentId);
-}
-
-function filterOrgTree(nodes: OrgNode[], tab: FilterTab, builtInAgentIds: Set<string>): OrgNode[] {
-  return nodes
-    .reduce<OrgNode[]>((acc, node) => {
-      const filteredReports = filterOrgTree(node.reports, tab, builtInAgentIds);
-      // Hidden agents (terminated / pending_approval) never render as a row, but
-      // any visible reports are promoted so the tree doesn't lose live agents.
-      if (HIDDEN_AGENT_STATUSES.has(node.status)) {
-        acc.push(...filteredReports);
-        return acc;
-      }
-      const nodeMatches = tab === "builtin"
-        ? builtInAgentIds.has(node.id)
-        : matchesFilter(node.status, tab);
-      if (nodeMatches || filteredReports.length > 0) {
-        acc.push({ ...node, reports: filteredReports });
-      }
-      return acc;
-    }, [])
-    .sort((a, b) => a.name.localeCompare(b.name));
+function agentModelLabel(agent: Agent | undefined) {
+  const config = agent?.adapterConfig;
+  if (!config || typeof config !== "object" || Array.isArray(config)) return null;
+  const model = (config as Record<string, unknown>).model;
+  return typeof model === "string" && model.trim() ? model : null;
 }
 
 export function Agents() {
@@ -238,25 +175,9 @@ export function Agents() {
     enabled: !!selectedCompanyId && effectiveView === "org",
   });
 
-  const environmentsEnabled = instanceSettings?.experimental.enableEnvironments === true;
-
-  const { data: environments } = useQuery({
-    queryKey: queryKeys.environments.list(selectedCompanyId!),
-    queryFn: () => environmentsApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId && environmentsEnabled,
-  });
-
-  const { data: environmentCapabilities } = useQuery({
-    queryKey: queryKeys.environments.capabilities(selectedCompanyId!),
-    queryFn: () => environmentsApi.capabilities(selectedCompanyId!),
-    enabled: !!selectedCompanyId && environmentsEnabled,
-  });
-
-  const runsQueryKey = [...queryKeys.liveRuns(selectedCompanyId!), "agents-page"] as const;
-  const sharedRuns = useSharedPollingQuery({
-    companyId: selectedCompanyId,
-    resourceKey: "live-runs:agents-page",
-    queryKey: runsQueryKey,
+  const { data: runs } = useQuery({
+    queryKey: queryKeys.heartbeats(selectedCompanyId!),
+    queryFn: () => heartbeatsApi.list(selectedCompanyId!),
     enabled: !!selectedCompanyId,
     refetchInterval: 15_000,
     leaderOnly: true,
@@ -556,8 +477,61 @@ export function Agents() {
 
       {/* List view */}
       {effectiveView === "list" && filtered.length > 0 && (
-        <div>
-          {filtered.map(renderAgentRow)}
+        <div className="border border-border">
+          {filtered.map((agent) => {
+            return (
+              <EntityRow
+                key={agent.id}
+                title={agent.name}
+                subtitle={`${roleLabels[agent.role] ?? agent.role}${agent.title ? ` - ${agent.title}` : ""}`}
+                to={agentUrl(agent)}
+                leading={
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span
+                      className={`absolute inline-flex h-full w-full rounded-full ${agentStatusDot[agent.status] ?? agentStatusDotDefault}`}
+                    />
+                  </span>
+                }
+                trailing={
+                  <div className="flex items-center gap-3">
+                    <span className="sm:hidden">
+                      {liveRunByAgent.has(agent.id) ? (
+                        <LiveRunIndicator
+                          agentRef={agentRouteRef(agent)}
+                          runId={liveRunByAgent.get(agent.id)!.runId}
+                          liveCount={liveRunByAgent.get(agent.id)!.liveCount}
+                        />
+                      ) : (
+                        <StatusBadge status={agent.status} />
+                      )}
+                    </span>
+                    <div className="hidden sm:flex items-center gap-3">
+                      {liveRunByAgent.has(agent.id) && (
+                        <LiveRunIndicator
+                          agentRef={agentRouteRef(agent)}
+                          runId={liveRunByAgent.get(agent.id)!.runId}
+                          liveCount={liveRunByAgent.get(agent.id)!.liveCount}
+                        />
+                      )}
+                      <span className="text-xs text-muted-foreground font-mono w-14 text-right">
+                        {adapterLabels[agent.adapterType] ?? agent.adapterType}
+                      </span>
+                      <span className="text-xs text-muted-foreground font-mono">
+                        {agent.adapterType}
+                        {agentModelLabel(agent) ? ` ${agentModelLabel(agent)}` : ""}
+                      </span>
+                      <span className="text-xs text-muted-foreground w-16 text-right">
+                        {agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "—"}
+                      </span>
+                      <span className="w-20 flex justify-end">
+                        <StatusBadge status={agent.status} />
+                      </span>
+                    </div>
+                  </div>
+                }
+              />
+            );
+          })}
         </div>
       )}
 
@@ -571,21 +545,7 @@ export function Agents() {
       {effectiveView === "org" && filteredOrg.length > 0 && (
         <div className="py-1">
           {filteredOrg.map((node) => (
-            <OrgTreeNode
-              key={node.id}
-              node={node}
-              depth={0}
-              agentMap={agentMap}
-              liveRunByAgent={liveRunByAgent}
-              environmentByAgentId={environmentByAgentId}
-              environmentDataLoading={environmentDataLoading}
-              showEnvironment={showEnvironmentColumn}
-              tab={tab}
-              memberships={membershipsQuery.data}
-              membershipMutation={membershipMutation}
-              builtInByAgentId={builtInByAgentId}
-              onConfigureBuiltIn={setConfigureState}
-            />
+            <OrgTreeNode key={node.id} node={node} depth={0} agentMap={agentMap} liveRunByAgent={liveRunByAgent} />
           ))}
         </div>
       )}
@@ -622,27 +582,11 @@ function OrgTreeNode({
   depth,
   agentMap,
   liveRunByAgent,
-  environmentByAgentId,
-  environmentDataLoading,
-  showEnvironment,
-  tab,
-  memberships,
-  membershipMutation,
-  builtInByAgentId,
-  onConfigureBuiltIn,
 }: {
   node: OrgNode;
   depth: number;
   agentMap: Map<string, Agent>;
   liveRunByAgent: Map<string, { runId: string; liveCount: number }>;
-  environmentByAgentId: Map<string, EnvironmentDescriptor>;
-  environmentDataLoading: boolean;
-  showEnvironment: boolean;
-  tab: FilterTab;
-  memberships: ReturnType<typeof useResourceMemberships>["data"];
-  membershipMutation: ReturnType<typeof useResourceMembershipMutation>;
-  builtInByAgentId: Map<string, BuiltInAgentState>;
-  onConfigureBuiltIn: (state: BuiltInAgentState) => void;
 }) {
   const agent = agentMap.get(node.id);
   const builtInState = builtInByAgentId.get(node.id);
@@ -659,11 +603,7 @@ function OrgTreeNode({
     <div style={{ paddingLeft: depth * 24 }}>
       <Link
         to={agent ? agentUrl(agent) : `/agents/${node.id}`}
-        className={cn(
-          "group flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-accent/50 transition-colors w-full text-left no-underline text-inherit",
-          agent?.pausedAt && tab !== "paused" && "opacity-50",
-          membershipState === "left" && "sm:text-foreground/55",
-        )}
+        className="flex items-center gap-3 px-3 py-2 hover:bg-accent/30 transition-colors w-full text-left no-underline text-inherit"
       >
         {hasInvalidOrgChain ? (
           <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-label="Invalid reporting chain" />
@@ -721,17 +661,18 @@ function OrgTreeNode({
               />
             )}
             {agent && (
-              <div className="hidden xl:flex items-center gap-3">
-                <AgentMetaColumns
-                  agent={agent}
-                  environment={
-                    environmentDataLoading
-                      ? loadingEnvironmentDescriptor
-                      : environmentByAgentId.get(agent.id) ?? localEnvironmentDescriptor
-                  }
-                  showEnvironment={showEnvironment}
-                />
-              </div>
+              <>
+                <span className="text-xs text-muted-foreground font-mono w-14 text-right">
+                  {adapterLabels[agent.adapterType] ?? agent.adapterType}
+                </span>
+                <span className="text-xs text-muted-foreground font-mono">
+                  {agent.adapterType}
+                  {agentModelLabel(agent) ? ` ${agentModelLabel(agent)}` : ""}
+                </span>
+                <span className="text-xs text-muted-foreground w-16 text-right">
+                  {agent.lastHeartbeatAt ? relativeTime(agent.lastHeartbeatAt) : "—"}
+                </span>
+              </>
             )}
             <span className="w-20 flex justify-end">
               <AgentStatusBadge status={node.status} />
@@ -774,21 +715,7 @@ function OrgTreeNode({
       {node.reports && node.reports.length > 0 && (
         <div className="border-l border-border ml-4">
           {node.reports.map((child) => (
-            <OrgTreeNode
-              key={child.id}
-              node={child}
-              depth={depth + 1}
-              agentMap={agentMap}
-              liveRunByAgent={liveRunByAgent}
-              environmentByAgentId={environmentByAgentId}
-              environmentDataLoading={environmentDataLoading}
-              showEnvironment={showEnvironment}
-              tab={tab}
-              memberships={memberships}
-              membershipMutation={membershipMutation}
-              builtInByAgentId={builtInByAgentId}
-              onConfigureBuiltIn={onConfigureBuiltIn}
-            />
+            <OrgTreeNode key={child.id} node={child} depth={depth + 1} agentMap={agentMap} liveRunByAgent={liveRunByAgent} />
           ))}
         </div>
       )}

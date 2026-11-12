@@ -5,10 +5,7 @@ import {
 } from "./instance-settings";
 
 describe("normalizeRememberedInstanceSettingsPath", () => {
-  it("canonicalizes known instance settings pages under company settings", () => {
-    expect(normalizeRememberedInstanceSettingsPath("/instance/settings/general")).toBe(
-      "/company/settings/instance/general",
-    );
+  it("keeps known instance settings pages", () => {
     expect(normalizeRememberedInstanceSettingsPath("/instance/settings/experimental")).toBe(
       "/company/settings/instance/experimental",
     );

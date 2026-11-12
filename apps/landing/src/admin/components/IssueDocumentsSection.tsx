@@ -24,7 +24,6 @@ import { DocumentAnnotationsCountChip, IssueDocumentAnnotations } from "./IssueD
 import type { DocumentAnnotationTarget } from "@/api/document-annotations";
 import { MarkdownBody, type MarkdownExternalReferenceMap } from "./MarkdownBody";
 import { MarkdownEditor, type MentionOption } from "./MarkdownEditor";
-import { OutputFeedbackButtons } from "./OutputFeedbackButtons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -250,7 +249,6 @@ export function IssueDocumentsSection({
   feedbackTermsUrl = null,
   mentions,
   imageUploadHandler,
-  onVote,
   extraActions,
   agentMap,
   userProfileMap,
@@ -268,11 +266,6 @@ export function IssueDocumentsSection({
   feedbackTermsUrl?: string | null;
   mentions?: MentionOption[];
   imageUploadHandler?: (file: File) => Promise<string>;
-  onVote?: (
-    revisionId: string,
-    vote: FeedbackVoteValue,
-    options?: { allowSharing?: boolean; reason?: string },
-  ) => Promise<void>;
   extraActions?: ReactNode;
   agentMap?: ReadonlyMap<string, Pick<Agent, "id" | "name"> & Partial<Pick<Agent, "icon">>>;
   userProfileMap?: ReadonlyMap<string, CompanyUserProfile>;
@@ -313,9 +306,6 @@ export function IssueDocumentsSection({
   const [autosaveDocumentKey, setAutosaveDocumentKey] = useState<string | null>(null);
   const [copiedDocumentKey, setCopiedDocumentKey] = useState<string | null>(null);
   const [highlightDocumentKey, setHighlightDocumentKey] = useState<string | null>(null);
-  const [revisionMenuOpenKey, setRevisionMenuOpenKey] = useState<string | null>(null);
-  const [selectedRevisionIds, setSelectedRevisionIds] = useState<Record<string, string | null>>({});
-  const [diffViewKey, setDiffViewKey] = useState<string | null>(null);
   const autosaveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copiedDocumentTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasScrolledToHashRef = useRef(false);
@@ -441,15 +431,6 @@ export function IssueDocumentsSection({
       return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
     });
   }, [documentSubject.hideSystemDocuments, documents]);
-
-  const feedbackVoteByTargetId = useMemo(() => {
-    const map = new Map<string, FeedbackVoteValue>();
-    for (const feedbackVote of feedbackVotes) {
-      if (feedbackVote.targetType !== "issue_document_revision") continue;
-      map.set(feedbackVote.targetId, feedbackVote.vote);
-    }
-    return map;
-  }, [feedbackVotes]);
 
   const hasRealPlan = sortedDocuments.some((doc) => doc.key === "plan");
   const isEmpty = sortedDocuments.length === 0 && !documentSubject.legacyPlanDocument;
@@ -595,7 +576,6 @@ export function IssueDocumentsSection({
           isNew: false,
         };
       });
-      syncDocumentCaches(saved);
       invalidateIssueDocuments();
     };
 
@@ -890,23 +870,21 @@ export function IssueDocumentsSection({
   return (
     <div className="space-y-3">
       {isEmpty && !draft?.isNew ? (
-        <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
+        <div className="flex items-center justify-end gap-2">
           {extraActions}
-          <Button variant="outline" size="sm" onClick={beginNewDocument} className="shrink-0">
+          <Button variant="outline" size="sm" onClick={beginNewDocument}>
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            <span className="hidden sm:inline">New document</span>
-            <span className="sm:hidden">New</span>
+            New document
           </Button>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-2 min-w-0">
-          <h3 className="w-full text-sm font-medium text-muted-foreground shrink-0 sm:w-auto">Documents</h3>
-          <div className="flex flex-wrap items-center gap-2 min-w-0 sm:ml-auto">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-medium text-muted-foreground">Documents</h3>
+          <div className="flex items-center gap-2">
             {extraActions}
-            <Button variant="outline" size="sm" onClick={beginNewDocument} className="shrink-0">
+            <Button variant="outline" size="sm" onClick={beginNewDocument}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />
-              <span className="hidden sm:inline">New document</span>
-              <span className="sm:hidden">New</span>
+              New document
             </Button>
           </div>
         </div>
@@ -1144,20 +1122,21 @@ export function IssueDocumentsSection({
               {!isFolded ? (
                 <div
                   className="mt-3 space-y-3"
-                  onBlurCapture={!isHistoricalPreview
-                    ? async (event) => {
-                        if (activeDraft) {
-                          await handleDraftBlur(event);
-                        }
-                      }
-                    : undefined}
-                  onKeyDown={!isHistoricalPreview
-                    ? async (event) => {
-                        if (activeDraft) {
-                          await handleDraftKeyDown(event);
-                        }
-                      }
-                    : undefined}
+                  onFocusCapture={() => {
+                    if (!activeDraft) {
+                      beginEdit(doc.key);
+                    }
+                  }}
+                  onBlurCapture={async (event) => {
+                    if (activeDraft) {
+                      await handleDraftBlur(event);
+                    }
+                  }}
+                  onKeyDown={async (event) => {
+                    if (activeDraft) {
+                      await handleDraftKeyDown(event);
+                    }
+                  }}
                 >
                   {isHistoricalPreview && selectedHistoricalRevision && (
                     <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-3">
@@ -1257,7 +1236,7 @@ export function IssueDocumentsSection({
                       )}
                     </div>
                   )}
-                  {activeDraft && !isPlanKey(doc.key) && !isHistoricalPreview && (
+                  {activeDraft && !isPlanKey(doc.key) && (
                     <Input
                       value={activeDraft.title}
                       onChange={(event) => {
@@ -1268,8 +1247,8 @@ export function IssueDocumentsSection({
                     />
                   )}
                   <div
-                    className={`${documentBodyShellClassName} ${
-                      activeDraft || isHistoricalPreview ? "" : "rounded-md hover:bg-accent/10"
+                    className={`${documentBodyShellClassName} ${documentBodyPaddingClassName} ${
+                      activeDraft ? "" : "hover:bg-accent/10"
                     }`}
                   >
                     {(() => {
@@ -1333,12 +1312,10 @@ export function IssueDocumentsSection({
                           : autosaveState === "error"
                             ? "text-destructive"
                             : "text-muted-foreground"
-                      } ${activeDraft || isHistoricalPreview ? "opacity-100" : "opacity-0"}`}
+                      } ${activeDraft ? "opacity-100" : "opacity-0"}`}
                     >
-                      {isHistoricalPreview
-                        ? "Viewing historical revision"
-                        : activeDraft
-                          ? activeConflict
+                      {activeDraft
+                        ? activeConflict
                           ? "Out of date"
                           : autosaveDocumentKey === doc.key
                             ? autosaveState === "saving"
@@ -1349,19 +1326,9 @@ export function IssueDocumentsSection({
                                   ? "Could not save"
                                   : ""
                             : ""
-                          : ""}
+                        : ""}
                     </span>
                   </div>
-                  {canVoteOnDocument && doc.latestRevisionId ? (
-                    <OutputFeedbackButtons
-                      activeVote={feedbackVoteByTargetId.get(doc.latestRevisionId) ?? null}
-                      sharingPreference={feedbackDataSharingPreference}
-                      termsUrl={feedbackTermsUrl}
-                      onVote={(vote: FeedbackVoteValue, options?: { allowSharing?: boolean; reason?: string }) =>
-                        onVote?.(doc.latestRevisionId!, vote, options) ?? Promise.resolve()
-                      }
-                    />
-                  ) : null}
                 </div>
               ) : null}
 

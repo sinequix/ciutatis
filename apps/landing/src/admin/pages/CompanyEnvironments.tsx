@@ -1313,10 +1313,11 @@ export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps)
       setProbeResults((current) => ({
         ...current,
         [environmentId]: {
+          success: false,
           ok: false,
           driver: failedEnvironment?.driver ?? "local",
           summary: error instanceof Error ? error.message : "Environment probe failed.",
-          details: null,
+          details: {},
         },
       }));
       pushToast({
@@ -1358,61 +1359,46 @@ export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps)
     setTestingEnvironmentId(null);
   }, [selectedCompanyId]);
 
-  const resetEnvironmentMutation = environmentMutation.reset;
-  const resetDraftEnvironmentProbeMutation = draftEnvironmentProbeMutation.reset;
-
-  useEffect(() => {
-    if (!isEnvironmentFormPage) {
-      initializedFormKeyRef.current = null;
-      setEnvironmentFormBaselineKey(null);
-      setEnvironmentVariablesDirty(false);
+  function handleEditEnvironment(environment: Environment) {
+    setEditingEnvironmentId(environment.id);
+    if (environment.driver === "ssh") {
+      const ssh = readSshConfig(environment);
+      setEnvironmentForm({
+        ...createEmptyEnvironmentForm(),
+        name: environment.name ?? "",
+        description: environment.description ?? "",
+        driver: "ssh",
+        sshHost: ssh.host,
+        sshPort: ssh.port,
+        sshUsername: ssh.username,
+        sshRemoteWorkspacePath: ssh.remoteWorkspacePath,
+        sshPrivateKey: ssh.privateKey,
+        sshPrivateKeySecretId: ssh.privateKeySecretId,
+        sshKnownHosts: ssh.knownHosts,
+        sshStrictHostKeyChecking: ssh.strictHostKeyChecking,
+      });
       return;
     }
 
-    const formKey = mode === "create"
-      ? `create:${selectedCompanyId ?? "none"}`
-      : `edit:${selectedCompanyId ?? "none"}:${editingEnvironmentId ?? "missing"}`;
-
-    if (initializedFormKeyRef.current === formKey) return;
-
-    resetEnvironmentMutation();
-    resetDraftEnvironmentProbeMutation();
-
-    if (mode === "create") {
-      const emptyForm = createEmptyEnvironmentForm();
-      setEnvironmentForm(emptyForm);
-      setEnvironmentFormBaselineKey(environmentFormKey(emptyForm));
-      setEnvironmentVariablesDirty(false);
-      initializedFormKeyRef.current = formKey;
+    if (environment.driver === "sandbox") {
+      const sandbox = readSandboxConfig(environment);
+      setEnvironmentForm({
+        ...createEmptyEnvironmentForm(),
+        name: environment.name ?? "",
+        description: environment.description ?? "",
+        driver: "sandbox",
+        sandboxProvider: sandbox.provider,
+        sandboxConfig: sandbox.config,
+      });
       return;
     }
 
-    const environment = editingEnvironmentId
-      ? (environments ?? []).find((candidate) => candidate.id === editingEnvironmentId) ?? null
-      : null;
-    if (!environment) return;
-
-    const nextForm = createEnvironmentFormFromEnvironment(environment);
-    setEnvironmentForm(nextForm);
-    setEnvironmentFormBaselineKey(environmentFormKey(nextForm));
-    setEnvironmentVariablesDirty(false);
-    initializedFormKeyRef.current = formKey;
-  }, [
-    editingEnvironmentId,
-    environments,
-    isEnvironmentFormPage,
-    mode,
-    resetDraftEnvironmentProbeMutation,
-    resetEnvironmentMutation,
-    selectedCompanyId,
-  ]);
-
-  function confirmDiscardEnvironmentChanges() {
-    return (
-      !environmentHasUnsavedChanges ||
-      typeof window === "undefined" ||
-      window.confirm(DISCARD_ENVIRONMENT_CHANGES_MESSAGE)
-    );
+    setEnvironmentForm({
+      ...createEmptyEnvironmentForm(),
+      name: environment.name ?? "",
+      description: environment.description ?? "",
+      driver: "local",
+    });
   }
 
   // The form page is routed, so leaving it (tab close, reload, or an in-app

@@ -25,36 +25,33 @@ export function ClaudeLocalConfigFields({
   eff,
   mark,
   models,
-  hideInstructionsFile,
 }: AdapterConfigFieldsProps) {
   return (
     <>
-      {!hideInstructionsFile && (
-        <Field label="Agent instructions file" hint={instructionsFileHint}>
-          <div className="flex items-center gap-2">
-            <DraftInput
-              value={
-                isCreate
-                  ? values!.instructionsFilePath ?? ""
-                  : eff(
-                      "adapterConfig",
-                      "instructionsFilePath",
-                      String(config.instructionsFilePath ?? ""),
-                    )
-              }
-              onCommit={(v) =>
-                isCreate
-                  ? set!({ instructionsFilePath: v })
-                  : mark("adapterConfig", "instructionsFilePath", v || undefined)
-              }
-              immediate
-              className={inputClass}
-              placeholder="/absolute/path/to/AGENTS.md"
-            />
-            <ChoosePathButton />
-          </div>
-        </Field>
-      )}
+      <Field label="Agent instructions file" hint={instructionsFileHint}>
+        <div className="flex items-center gap-2">
+          <DraftInput
+            value={
+              isCreate
+                ? values!.instructionsFilePath ?? ""
+                : eff(
+                    "adapterConfig",
+                    "instructionsFilePath",
+                    String(config.instructionsFilePath ?? ""),
+                  )
+            }
+            onCommit={(v) =>
+              isCreate
+                ? set!({ instructionsFilePath: v })
+                : mark("adapterConfig", "instructionsFilePath", v || undefined)
+            }
+            immediate
+            className={inputClass}
+            placeholder="/absolute/path/to/AGENTS.md"
+          />
+          <ChoosePathButton />
+        </div>
+      </Field>
       <LocalWorkspaceRuntimeFields
         isCreate={isCreate}
         values={values}
@@ -259,9 +256,9 @@ export function ClaudeLocalAdvancedFields({
             value={eff(
               "adapterConfig",
               "maxTurnsPerRun",
-              Number(config.maxTurnsPerRun ?? 1000),
+              Number(config.maxTurnsPerRun ?? 300),
             )}
-            onCommit={(v) => mark("adapterConfig", "maxTurnsPerRun", v || 1000)}
+            onCommit={(v) => mark("adapterConfig", "maxTurnsPerRun", v || 300)}
             immediate
             className={inputClass}
           />

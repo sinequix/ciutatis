@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Project } from "@paperclipai/shared";
-import { sidebarPreferencesApi } from "../api/sidebarPreferences";
-import { sortProjectsByStoredOrder } from "../lib/project-order";
-import { queryKeys } from "../lib/queryKeys";
+import {
+  getProjectOrderStorageKey,
+  PROJECT_ORDER_UPDATED_EVENT,
+  readProjectOrder,
+  sortProjectsByStoredOrder,
+  writeProjectOrder,
+} from "../lib/project-order";
 
 type UseProjectOrderParams = {
   projects: Project[];
   companyId: string | null | undefined;
   userId: string | null | undefined;
+};
+
+type ProjectOrderUpdatedDetail = {
+  storageKey: string;
+  orderedIds: string[];
 };
 
 function areEqual(a: string[], b: string[]) {
@@ -24,33 +32,48 @@ function buildOrderIds(projects: Project[], orderedIds: string[]) {
 }
 
 export function useProjectOrder({ projects, companyId, userId }: UseProjectOrderParams) {
-  const queryClient = useQueryClient();
-  const queryKey = useMemo(
-    () => queryKeys.sidebarPreferences.projectOrder(companyId ?? "__none__", userId ?? "__anon__"),
-    [companyId, userId],
-  );
-
-  const { data } = useQuery({
-    queryKey,
-    queryFn: () => sidebarPreferencesApi.getProjectOrder(companyId!),
-    enabled: Boolean(companyId && userId),
-  });
+  const storageKey = useMemo(() => {
+    if (!companyId) return null;
+    return getProjectOrderStorageKey(companyId, userId);
+  }, [companyId, userId]);
 
   const [orderedIds, setOrderedIds] = useState<string[]>(() => {
-    return buildOrderIds(projects, []);
+    if (!storageKey) return projects.map((project) => project.id);
+    return buildOrderIds(projects, readProjectOrder(storageKey));
   });
 
   useEffect(() => {
-    const nextIds = buildOrderIds(projects, data?.orderedIds ?? []);
+    const nextIds = storageKey
+      ? buildOrderIds(projects, readProjectOrder(storageKey))
+      : projects.map((project) => project.id);
     setOrderedIds((current) => (areEqual(current, nextIds) ? current : nextIds));
-  }, [data?.orderedIds, projects]);
+  }, [projects, storageKey]);
 
-  const mutation = useMutation({
-    mutationFn: (nextIds: string[]) => sidebarPreferencesApi.updateProjectOrder(companyId!, { orderedIds: nextIds }),
-    onSuccess: (preference) => {
-      queryClient.setQueryData(queryKey, preference);
-    },
-  });
+  useEffect(() => {
+    if (!storageKey) return;
+
+    const syncFromIds = (ids: string[]) => {
+      const nextIds = buildOrderIds(projects, ids);
+      setOrderedIds((current) => (areEqual(current, nextIds) ? current : nextIds));
+    };
+
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== storageKey) return;
+      syncFromIds(readProjectOrder(storageKey));
+    };
+    const onCustomEvent = (event: Event) => {
+      const detail = (event as CustomEvent<ProjectOrderUpdatedDetail>).detail;
+      if (!detail || detail.storageKey !== storageKey) return;
+      syncFromIds(detail.orderedIds);
+    };
+
+    window.addEventListener("storage", onStorage);
+    window.addEventListener(PROJECT_ORDER_UPDATED_EVENT, onCustomEvent);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener(PROJECT_ORDER_UPDATED_EVENT, onCustomEvent);
+    };
+  }, [projects, storageKey]);
 
   const orderedProjects = useMemo(
     () => sortProjectsByStoredOrder(projects, orderedIds),
@@ -66,15 +89,11 @@ export function useProjectOrder({ projects, companyId, userId }: UseProjectOrder
       }
 
       setOrderedIds((current) => (areEqual(current, filtered) ? current : filtered));
-      if (!companyId || !userId) return;
-
-      queryClient.setQueryData(queryKey, (current: { orderedIds?: string[]; updatedAt?: Date | null } | undefined) => ({
-        orderedIds: filtered,
-        updatedAt: current?.updatedAt ?? null,
-      }));
-      mutation.mutate(filtered);
+      if (storageKey) {
+        writeProjectOrder(storageKey, filtered);
+      }
     },
-    [companyId, mutation, projects, queryClient, queryKey, userId],
+    [projects, storageKey],
   );
 
   return {
@@ -83,3 +102,4 @@ export function useProjectOrder({ projects, companyId, userId }: UseProjectOrder
     persistOrder,
   };
 }
+

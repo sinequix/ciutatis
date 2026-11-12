@@ -51,9 +51,9 @@ function blockedAttentionLabel(blockerAttention: IssueBlockerAttention | null | 
   }
 
   if (blockerAttention.reason === "attention_required") {
-    const count = blockerAttention.attentionBlockerCount || blockerAttention.unresolvedBlockerCount;
+    const count = blockerAttention.attentionBlockerCount || blockerAttention.unresolvedBlockerCount || 0;
     const attentionCopy = `${count} ${count === 1 ? "blocker needs" : "blockers need"} attention`;
-    const coveredCount = blockerAttention.coveredBlockerCount;
+    const coveredCount = blockerAttention.coveredBlockerCount ?? 0;
     if (coveredCount > 0) {
       return `Blocked · ${attentionCopy}; ${coveredCount} covered by active work`;
     }

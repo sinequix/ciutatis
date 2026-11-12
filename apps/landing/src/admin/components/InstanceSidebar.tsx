@@ -1,11 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
-import { Clock3, Cpu, FlaskConical, MonitorCog, Puzzle, Settings, Shield, SlidersHorizontal, UserRoundPen } from "lucide-react";
-import type { PluginRecord } from "@paperclipai/shared";
+import { Building2, CloudCog, Compass, Clock3, FlaskConical, Puzzle, Settings } from "lucide-react";
 import { NavLink } from "@/lib/router";
 import { pluginsApi } from "@/api/plugins";
 import { INSTANCE_SETTINGS_PATH_PREFIX } from "@/lib/instance-settings";
 import { queryKeys } from "@/lib/queryKeys";
-import { SIDEBAR_SCROLL_RESET_STATE } from "@/lib/navigation-scroll";
 import { SidebarNavItem } from "./SidebarNavItem";
 
 /**
@@ -39,20 +37,18 @@ export function InstanceSidebar() {
 
       <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide flex flex-col gap-4 px-3 py-2">
         <div className="flex flex-col gap-0.5">
-          <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/profile`} label="Profile" icon={UserRoundPen} end />
-          <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/general`} label="General" icon={SlidersHorizontal} end />
-          <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/environments`} label="Environments" icon={MonitorCog} end />
-          <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/access`} label="Access" icon={Shield} end />
-          <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/heartbeats`} label="Heartbeats" icon={Clock3} end />
-          <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/experimental`} label="Experimental" icon={FlaskConical} />
-          <SidebarNavItem to={`${INSTANCE_SETTINGS_PATH_PREFIX}/plugins`} label="Plugins" icon={Puzzle} />
-          {sidebarPlugins.length > 0 ? (
+          <SidebarNavItem to="/instance/settings/overview" label="Control Panel" icon={Compass} />
+          <SidebarNavItem to="/instance/settings/heartbeats" label="Heartbeats" icon={Clock3} end />
+          <SidebarNavItem to="/instance/settings/tenants" label="Tenants" icon={Building2} />
+          <SidebarNavItem to="/instance/settings/cloudflare" label="Cloudflare" icon={CloudCog} />
+          <SidebarNavItem to="/instance/settings/experimental" label="Experimental" icon={FlaskConical} />
+          <SidebarNavItem to="/instance/settings/plugins" label="Plugins" icon={Puzzle} />
+          {(plugins ?? []).length > 0 ? (
             <div className="ml-4 mt-1 flex flex-col gap-0.5 border-l border-border/70 pl-3">
               {sidebarPlugins.map((plugin) => (
                 <NavLink
                   key={plugin.id}
-                  to={`${INSTANCE_SETTINGS_PATH_PREFIX}/plugins/${plugin.id}`}
-                  state={SIDEBAR_SCROLL_RESET_STATE}
+                  to={`/instance/settings/plugins/${plugin.id}`}
                   className={({ isActive }) =>
                     [
                       "rounded-md px-2 py-1.5 text-xs transition-colors",

@@ -9,11 +9,15 @@ import {
 } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Company } from "@paperclipai/shared";
+import { useLocation } from "@/lib/router";
 import { companiesApi } from "../api/companies";
 import { companiesListQueryOptions, type CompanyListResult } from "../api/companies-query";
 import { queryKeys } from "../lib/queryKeys";
 import type { CompanySelectionSource } from "../lib/company-selection";
+import { isPublicSitePath } from "../lib/public-site-paths";
 type CompanySelectionOptions = { source?: CompanySelectionSource };
+type CompanyQueryResult = { companies: Company[]; unauthorized: boolean };
+type CompanySelectionCompany = Pick<Company, "id">;
 
 interface CompanyContextValue {
   companies: Company[];
@@ -35,72 +39,100 @@ const STORAGE_KEY = "paperclip.selectedCompanyId";
 
 const CompanyContext = createContext<CompanyContextValue | null>(null);
 
-export function resolveBootstrapCompanySelection(input: {
-  companies: Array<Pick<Company, "id">>;
-  sidebarCompanies: Array<Pick<Company, "id">>;
+export function resolveBootstrapCompanySelection({
+  companies,
+  sidebarCompanies,
+  selectedCompanyId,
+  storedCompanyId,
+}: {
+  companies: CompanySelectionCompany[];
+  sidebarCompanies: CompanySelectionCompany[];
   selectedCompanyId: string | null;
   storedCompanyId: string | null;
 }) {
-  if (input.companies.length === 0) return null;
-
-  const selectableCompanies = input.sidebarCompanies.length > 0
-    ? input.sidebarCompanies
-    : input.companies;
-  if (input.selectedCompanyId && selectableCompanies.some((company) => company.id === input.selectedCompanyId)) {
-    return input.selectedCompanyId;
+  if (companies.length === 0) return null;
+  const selectableCompanies = sidebarCompanies.length > 0 ? sidebarCompanies : companies;
+  if (selectedCompanyId && selectableCompanies.some((company) => company.id === selectedCompanyId)) {
+    return selectedCompanyId;
   }
-  if (input.storedCompanyId && selectableCompanies.some((company) => company.id === input.storedCompanyId)) {
-    return input.storedCompanyId;
+  if (storedCompanyId && selectableCompanies.some((company) => company.id === storedCompanyId)) {
+    return storedCompanyId;
   }
   return selectableCompanies[0]?.id ?? null;
 }
 
-export function shouldClearStoredCompanySelection(input: {
-  companies: Array<Pick<Company, "id">>;
+export function shouldClearStoredCompanySelection({
+  companies,
+  isLoading,
+  unauthorized,
+}: {
+  companies: CompanySelectionCompany[];
   isLoading: boolean;
   unauthorized: boolean;
 }) {
-  return !input.isLoading && !input.unauthorized && input.companies.length === 0;
+  return !isLoading && !unauthorized && companies.length === 0;
+}
+
+function normalizeCompaniesQueryResult(data: CompanyQueryResult | Company[] | undefined): CompanyQueryResult {
+  if (Array.isArray(data)) {
+    return { companies: data, unauthorized: false };
+  }
+  return data ?? { companies: [], unauthorized: false };
+}
+
+function useSafeLocationPathname() {
+  try {
+    return useLocation().pathname;
+  } catch {
+    return typeof window === "undefined" ? "/" : window.location.pathname;
+  }
 }
 
 export function CompanyProvider({ children }: { children: ReactNode }) {
+  const pathname = useSafeLocationPathname();
   const queryClient = useQueryClient();
   const [selectionSource, setSelectionSource] = useState<CompanySelectionSource>("bootstrap");
   const [selectedCompanyId, setSelectedCompanyIdState] = useState<string | null>(null);
+  const isPublicRoute = isPublicSitePath(pathname);
 
-  const { data: companiesResult = { companies: [], unauthorized: false }, isLoading, error } =
-    useQuery<CompanyListResult>(companiesListQueryOptions);
-  const companies = companiesResult.companies;
-  const companyListUnauthorized = companiesResult.unauthorized;
+  const { data: companiesQuery, isLoading, error } = useQuery<CompanyQueryResult>({
+    queryKey: queryKeys.companies.all,
+    queryFn: async () => {
+      try {
+        return { companies: await companiesApi.list(), unauthorized: false };
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 401) {
+          return { companies: [], unauthorized: true };
+        }
+        throw err;
+      }
+    },
+    enabled: !isPublicRoute,
+    retry: false,
+  });
+  const { companies, unauthorized } = normalizeCompaniesQueryResult(companiesQuery);
   const sidebarCompanies = useMemo(
     () => companies.filter((company) => company.status !== "archived"),
     [companies],
   );
 
-  // Auto-select first company when list loads
   useEffect(() => {
-    if (isLoading) return;
-    if (companies.length === 0) {
-      if (shouldClearStoredCompanySelection({ companies, isLoading: false, unauthorized: companyListUnauthorized })) {
-        if (selectedCompanyId !== null) {
-          setSelectedCompanyIdState(null);
-        }
-        localStorage.removeItem(STORAGE_KEY);
-      }
-      return;
-    }
-
+    const stored = localStorage.getItem(STORAGE_KEY);
     const next = resolveBootstrapCompanySelection({
       companies,
       sidebarCompanies,
       selectedCompanyId,
-      storedCompanyId: localStorage.getItem(STORAGE_KEY),
+      storedCompanyId: stored,
     });
-    if (next === null || next === selectedCompanyId) return;
+    if (next === selectedCompanyId) return;
     setSelectedCompanyIdState(next);
     setSelectionSource("bootstrap");
-    localStorage.setItem(STORAGE_KEY, next);
-  }, [companies, companyListUnauthorized, isLoading, selectedCompanyId, sidebarCompanies]);
+    if (next) {
+      localStorage.setItem(STORAGE_KEY, next);
+    } else if (shouldClearStoredCompanySelection({ companies, isLoading, unauthorized })) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }, [companies, isLoading, selectedCompanyId, sidebarCompanies, unauthorized]);
 
   const setSelectedCompanyId = useCallback((companyId: string, options?: CompanySelectionOptions) => {
     setSelectedCompanyIdState(companyId);
@@ -177,12 +209,6 @@ export function useCompany() {
   return ctx;
 }
 
-/**
- * Non-throwing variant of {@link useCompany}. Returns null when called outside a
- * CompanyProvider instead of throwing, so components that may render in
- * provider-less surfaces (e.g. exported/standalone markdown) can read company
- * state without crashing.
- */
-export function useOptionalCompany(): CompanyContextValue | null {
+export function useOptionalCompany() {
   return useContext(CompanyContext);
 }

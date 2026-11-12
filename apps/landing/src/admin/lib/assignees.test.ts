@@ -5,7 +5,6 @@ import {
   formatAssigneeUserLabel,
   formatUserLabel,
   parseAssigneeValue,
-  suggestedCommentAssigneeValue,
 } from "./assignees";
 
 describe("assignee selection helpers", () => {
@@ -48,7 +47,7 @@ describe("assignee selection helpers", () => {
   });
 
   it("formats current and board user labels consistently", () => {
-    expect(formatAssigneeUserLabel("user-1", "user-1")).toBe("You");
+    expect(formatAssigneeUserLabel("user-1", "user-1")).toBe("Me");
     expect(formatAssigneeUserLabel("local-board", "someone-else")).toBe("Board");
     expect(formatAssigneeUserLabel("user-abcdef", "someone-else")).toBe("user-");
   });

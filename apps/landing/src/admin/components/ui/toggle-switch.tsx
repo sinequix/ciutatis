@@ -1,62 +1,66 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
-export interface ToggleSwitchProps
-  extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, "onChange"> {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
-  size?: "default" | "lg";
-}
+type ToggleSwitchProps = Omit<React.ComponentProps<"button">, "onChange"> & {
+  checked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
+  size?: "sm" | "md" | "lg";
+};
 
-/*
- * Custom API (checked/onCheckedChange button, no Radix dep) with the shadcn
- * radix-luma Switch's capsule form: border-2 track, oval thumb, bg-input
- * off-state. Deliberate deviation from the registry: the on-state is the
- * status-system green (var(--status-task-done)), not bg-primary — user
- * ruling, DECISION-SHEET "toggle form" note. Do not swap for the registry
- * Switch without revisiting that ruling (C7).
- */
-export const ToggleSwitch = React.forwardRef<
-  HTMLButtonElement,
-  ToggleSwitchProps
->(
-  (
-    { checked, onCheckedChange, size = "default", className, disabled, ...props },
-    ref,
-  ) => {
-    const isLg = size === "lg";
-
-    return (
-      <button
-        ref={ref}
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        data-slot="toggle"
-        disabled={disabled}
-        className={cn(
-          "relative inline-flex shrink-0 items-center rounded-full border-2 transition-all outline-none",
-          "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30",
-          "disabled:cursor-not-allowed disabled:opacity-50",
-          isLg ? "h-6 w-12" : "h-5 w-11",
-          checked
-            ? "border-(--status-task-done) bg-(--status-task-done)"
-            : "border-transparent bg-input/90",
-          className,
-        )}
-        onClick={() => onCheckedChange(!checked)}
-        {...props}
-      >
-        <span
-          className={cn(
-            "pointer-events-none inline-block rounded-full bg-background shadow-sm transition-transform not-dark:bg-clip-padding dark:bg-foreground",
-            isLg ? "h-5 w-7" : "h-4 w-6",
-            checked ? "translate-x-4" : "translate-x-0",
-          )}
-        />
-      </button>
-    );
+const SIZE_CLASSES = {
+  sm: {
+    track: "h-5 w-9",
+    thumb: "h-4 w-4 data-[state=checked]:translate-x-4",
   },
-);
+  md: {
+    track: "h-6 w-10",
+    thumb: "h-5 w-5 data-[state=checked]:translate-x-4",
+  },
+  lg: {
+    track: "h-7 w-12",
+    thumb: "h-6 w-6 data-[state=checked]:translate-x-5",
+  },
+} as const;
 
-ToggleSwitch.displayName = "ToggleSwitch";
+export function ToggleSwitch({
+  checked = false,
+  onCheckedChange,
+  size = "md",
+  disabled,
+  className,
+  onClick,
+  ...props
+}: ToggleSwitchProps) {
+  const state = checked ? "checked" : "unchecked";
+  const classes = SIZE_CLASSES[size] ?? SIZE_CLASSES.md;
+
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      data-state={state}
+      className={cn(
+        "inline-flex shrink-0 items-center rounded-full border border-transparent bg-muted p-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary",
+        classes.track,
+        className,
+      )}
+      onClick={(event) => {
+        onClick?.(event);
+        if (!event.defaultPrevented) {
+          onCheckedChange?.(!checked);
+        }
+      }}
+      {...props}
+    >
+      <span
+        data-state={state}
+        className={cn(
+          "block rounded-full bg-background shadow-sm transition-transform",
+          classes.thumb,
+        )}
+      />
+    </button>
+  );
+}

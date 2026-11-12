@@ -4,7 +4,6 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import {
   Dialog,
   DialogContent,
@@ -26,16 +25,15 @@ export const help: Record<string, string> = {
   reportsTo: "The agent this one reports to in the org hierarchy.",
   capabilities: "Describes what this agent can do. Shown in the org chart and used for task routing.",
   adapterType: "How this agent runs: local CLI (Claude/Codex/OpenCode), OpenClaw Gateway, spawned process, or generic HTTP webhook.",
-  cwd: "Deprecated legacy working directory fallback for local adapters. Existing agents may still carry this value, but new configurations should use project workspaces instead.",
+  cwd: "Default working directory fallback for local adapters. Use an absolute path on the machine running Ciutatis.",
   promptTemplate: "Sent on every heartbeat. Keep this small and dynamic. Use it for current-task framing, not large static instructions. Supports {{ agent.id }}, {{ agent.name }}, {{ agent.role }} and other template variables.",
   model: "Override the default model used by the adapter.",
   thinkingEffort: "Control model reasoning depth. Supported values vary by adapter/model.",
   chrome: "Enable Claude's Chrome integration by passing --chrome.",
-  dangerouslySkipPermissions: "Run unattended by auto-approving adapter permission prompts when supported.",
+  dangerouslySkipPermissions: "Run Claude without permission prompts. Required for unattended operation.",
   dangerouslyBypassSandbox: "Run Codex without sandbox restrictions. Required for filesystem/network access.",
   search: "Enable Codex web search capability during runs.",
-  fastMode: "Enable Codex Fast mode. This burns credits/tokens much faster and is supported on GPT-5.6, GPT-5.5, GPT-5.4, and manual Codex model IDs.",
-  workspaceStrategy: "How Paperclip should realize an execution workspace for this agent. Keep project_primary for normal cwd execution, or use git_worktree for issue-scoped isolated checkouts.",
+  workspaceStrategy: "How Ciutatis should realize an execution workspace for this agent. Keep project_primary for normal cwd execution, or use git_worktree for issue-scoped isolated checkouts.",
   workspaceBaseRef: "Base git ref used when creating a worktree branch. Leave blank to use the resolved workspace ref or HEAD.",
   workspaceBranchTemplate: "Template for naming derived branches. Supports {{issue.identifier}}, {{issue.title}}, {{agent.name}}, {{project.id}}, {{workspace.repoRef}}, and {{slug}}.",
   worktreeParentDir: "Directory where derived worktrees should be created. Absolute, ~-prefixed, and repo-relative paths are supported.",
@@ -46,8 +44,8 @@ export const help: Record<string, string> = {
   args: "Command-line arguments, comma-separated.",
   extraArgs: "Extra CLI arguments for local adapters, comma-separated.",
   envVars: "Environment variables injected into the adapter process. Use plain values or secret references.",
-  bootstrapPrompt: "Only sent when Paperclip starts a fresh session. Use this for stable setup guidance that should not be repeated on every heartbeat.",
-  payloadTemplateJson: "Optional JSON merged into remote adapter request payloads before Paperclip adds its standard wake and workspace fields.",
+  bootstrapPrompt: "Only sent when Ciutatis starts a fresh session. Use this for stable setup guidance that should not be repeated on every heartbeat.",
+  payloadTemplateJson: "Optional JSON merged into remote adapter request payloads before Ciutatis adds its standard wake and workspace fields.",
   webhookUrl: "The URL that receives POST requests when the agent is invoked.",
   heartbeatInterval: "Run this agent automatically on a timer. Useful for periodic tasks like checking for new work.",
   intervalSec: "Seconds between automatic heartbeat invocations.",
@@ -56,15 +54,20 @@ export const help: Record<string, string> = {
   wakeOnDemand: "Allow this agent to be woken by assignments, API calls, UI actions, or automated systems.",
   cooldownSec: "Minimum seconds between consecutive heartbeat runs.",
   maxConcurrentRuns: "Maximum number of heartbeat runs that can execute simultaneously for this agent.",
-  maxTurnContinuationEnabled: "Automatically queue bounded continuation runs when an adapter stops because its per-run turn cap was exhausted.",
-  maxTurnContinuationMaxAttempts: "Maximum automatic continuations after one max-turn stop. This is separate from max turns per run.",
-  maxTurnContinuationDelaySec: "Seconds to wait before starting each max-turn continuation.",
   budgetMonthlyCents: "Monthly spending limit in cents. 0 means no limit.",
 };
 
-import { getAdapterLabels } from "../adapters/adapter-display-registry";
-
-export const adapterLabels = getAdapterLabels();
+export const adapterLabels: Record<string, string> = {
+  cloudflare_workers_ai: "Cloudflare Workers AI",
+  claude_local: "Claude (local)",
+  codex_local: "Codex (local)",
+  gemini_local: "Gemini CLI (local)",
+  opencode_local: "OpenCode (local)",
+  openclaw_gateway: "OpenClaw Gateway",
+  cursor: "Cursor (local)",
+  process: "Process",
+  http: "HTTP",
+};
 
 export const roleLabels = AGENT_ROLE_LABELS as Record<string, string>;
 
@@ -102,13 +105,11 @@ export function ToggleField({
   hint,
   checked,
   onChange,
-  toggleTestId,
 }: {
   label: string;
   hint?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
-  toggleTestId?: string;
 }) {
   return (
     <div className="flex items-center justify-between">
@@ -116,14 +117,20 @@ export function ToggleField({
         <span className="text-xs text-muted-foreground">{label}</span>
         {hint && <HintIcon text={hint} />}
       </div>
-      {/* Gallery feedback r3: was a hand-rolled h-5 w-9 pill with a bg-green-600
-          track — the app's second switch implementation. Converged on the one
-          canonical ToggleSwitch (status-green on-state), DESIGN.md principle 1. */}
-      <ToggleSwitch
-        data-testid={toggleTestId}
-        checked={checked}
-        onCheckedChange={onChange}
-      />
+      <button
+        className={cn(
+          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+          checked ? "bg-green-600" : "bg-muted"
+        )}
+        onClick={() => onChange(!checked)}
+      >
+        <span
+          className={cn(
+            "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+            checked ? "translate-x-4.5" : "translate-x-0.5"
+          )}
+        />
+      </button>
     </div>
   );
 }
@@ -158,10 +165,20 @@ export function ToggleWithNumber({
           <span className="text-xs text-muted-foreground">{label}</span>
           {hint && <HintIcon text={hint} />}
         </div>
-        <ToggleSwitch
-          checked={checked}
-          onCheckedChange={onCheckedChange}
-        />
+        <button
+          className={cn(
+            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors shrink-0",
+            checked ? "bg-green-600" : "bg-muted"
+          )}
+          onClick={() => onCheckedChange(!checked)}
+        >
+          <span
+            className={cn(
+              "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+              checked ? "translate-x-4.5" : "translate-x-0.5"
+            )}
+          />
+        </button>
       </div>
       {showNumber && (
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

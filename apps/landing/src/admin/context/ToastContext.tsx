@@ -39,14 +39,11 @@ export interface ToastItem {
   createdAt: number;
 }
 
-interface ToastActionsContextValue {
+interface ToastContextValue {
+  toasts: ToastItem[];
   pushToast: (input: ToastInput) => string | null;
   dismissToast: (id: string) => void;
   clearToasts: () => void;
-}
-
-interface ToastContextValue extends ToastActionsContextValue {
-  toasts: ToastItem[];
 }
 
 const DEFAULT_TTL_BY_TONE: Record<ToastTone, number> = {
@@ -61,8 +58,7 @@ const MAX_TOASTS = 5;
 const DEDUPE_WINDOW_MS = 3500;
 const DEDUPE_MAX_AGE_MS = 20000;
 
-const ToastStateContext = createContext<ToastItem[] | null>(null);
-const ToastActionsContext = createContext<ToastActionsContextValue | null>(null);
+const ToastContext = createContext<ToastContextValue | null>(null);
 
 function normalizeTtl(value: number | undefined, tone: ToastTone) {
   const fallback = DEFAULT_TTL_BY_TONE[tone];
@@ -157,44 +153,31 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     timersRef.current.clear();
   }, []);
 
-  const actions = useMemo<ToastActionsContextValue>(
+  const value = useMemo<ToastContextValue>(
     () => ({
+      toasts,
       pushToast,
       dismissToast,
       clearToasts,
     }),
-    [pushToast, dismissToast, clearToasts],
+    [toasts, pushToast, dismissToast, clearToasts],
   );
 
-  return (
-    <ToastActionsContext.Provider value={actions}>
-      <ToastStateContext.Provider value={toasts}>{children}</ToastStateContext.Provider>
-    </ToastActionsContext.Provider>
-  );
+  return <ToastContext.Provider value={value}>{children}</ToastContext.Provider>;
 }
 
-export function useToastState() {
-  const context = useContext(ToastStateContext);
+export function useOptionalToastActions() {
+  return useContext(ToastContext);
+}
+
+export function useToast() {
+  const context = useContext(ToastContext);
   if (!context) {
-    throw new Error("useToastState must be used within a ToastProvider");
+    throw new Error("useToast must be used within a ToastProvider");
   }
   return context;
 }
 
 export function useToastActions() {
-  const context = useContext(ToastActionsContext);
-  if (!context) {
-    throw new Error("useToastActions must be used within a ToastProvider");
-  }
-  return context;
-}
-
-export function useOptionalToastActions() {
-  return useContext(ToastActionsContext);
-}
-
-export function useToast() {
-  const toasts = useToastState();
-  const actions = useToastActions();
-  return useMemo<ToastContextValue>(() => ({ toasts, ...actions }), [toasts, actions]);
+  return useToast();
 }

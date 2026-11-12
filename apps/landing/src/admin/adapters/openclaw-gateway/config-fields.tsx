@@ -307,81 +307,105 @@ export function OpenClawGatewayConfigFields({
         mark={mark}
       />
 
-      <Field label="Paperclip API URL override">
-        <DraftInput
-          value={
-            isCreate
-              ? values!.paperclipApiUrl ?? ""
-              : eff("adapterConfig", "paperclipApiUrl", String(config.paperclipApiUrl ?? ""))
-          }
-          onCommit={(v) =>
-            isCreate
-              ? set!({ paperclipApiUrl: v })
-              : mark("adapterConfig", "paperclipApiUrl", v || undefined)
-          }
-          immediate
-          className={inputClass}
-          placeholder="https://paperclip.example"
-        />
-      </Field>
-
-      <Field label="Timeout (seconds)">
-        <DraftInput
-          value={
-            isCreate
-              ? values!.timeoutSec != null ? String(values!.timeoutSec) : ""
-              : eff("adapterConfig", "timeoutSec", String(config.timeoutSec ?? ""))
-          }
-          onCommit={(v) => {
-            const parsed = Number.parseInt(v.trim(), 10);
-            const val = Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
-            if (isCreate) {
-              set!({ timeoutSec: val });
-            } else {
-              mark("adapterConfig", "timeoutSec", val);
-            }
-          }}
-          immediate
-          className={inputClass}
-          placeholder="120"
-        />
-      </Field>
-
-      <Field label="Headers JSON">
-        <HeadersJsonTextarea
-          isCreate={isCreate}
-          createDraft={isCreate ? values!.headersJson ?? "" : ""}
-          onCreateDraftChange={(next) => set!({ headersJson: next })}
-          editStringified={JSON.stringify(eff("adapterConfig", "headers", config.headers ?? {}), null, 2)}
-          onEditCommit={(next) => {
-            const trimmed = next.trim();
-            if (!trimmed) {
-              mark("adapterConfig", "headers", undefined);
-              return;
-            }
-            try {
-              const parsed = JSON.parse(trimmed);
-              if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
-                mark("adapterConfig", "headers", parsed);
-              }
-            } catch {
-              // Keep local draft until JSON is valid
-            }
-          }}
-          inputClass={inputClass}
-        />
-      </Field>
-
       {!isCreate && (
-        <Field label="Claimed API key path">
-          <DraftInput
-            value={eff("adapterConfig", "claimedApiKeyPath", String(config.claimedApiKeyPath ?? ""))}
-            onCommit={(v) => mark("adapterConfig", "claimedApiKeyPath", v || undefined)}
-            immediate
-            className={inputClass}
-            placeholder="~/.openclaw/workspace/paperclip-claimed-api-key.json"
+        <>
+          <Field label="Ciutatis API URL override">
+            <DraftInput
+              value={
+                eff(
+                  "adapterConfig",
+                  "paperclipApiUrl",
+                  String(config.paperclipApiUrl ?? ""),
+                )
+              }
+              onCommit={(v) => mark("adapterConfig", "paperclipApiUrl", v || undefined)}
+              immediate
+              className={inputClass}
+              placeholder="https://paperclip.example"
+            />
+          </Field>
+
+          <Field label="Session strategy">
+            <select
+              value={sessionStrategy}
+              onChange={(e) => mark("adapterConfig", "sessionKeyStrategy", e.target.value)}
+              className={inputClass}
+            >
+              <option value="fixed">Fixed</option>
+              <option value="issue">Per issue</option>
+              <option value="run">Per run</option>
+            </select>
+          </Field>
+
+          {sessionStrategy === "fixed" && (
+            <Field label="Session key">
+              <DraftInput
+                value={eff("adapterConfig", "sessionKey", String(config.sessionKey ?? "paperclip"))}
+                onCommit={(v) => mark("adapterConfig", "sessionKey", v || undefined)}
+                immediate
+                className={inputClass}
+                placeholder="paperclip"
+              />
+            </Field>
+          )}
+
+          <SecretField
+            label="Gateway auth token (x-openclaw-token)"
+            value={effectiveGatewayToken}
+            onCommit={commitGatewayToken}
+            placeholder="OpenClaw gateway token"
           />
-        </Field>
+
+          <Field label="Role">
+            <DraftInput
+              value={eff("adapterConfig", "role", String(config.role ?? "operator"))}
+              onCommit={(v) => mark("adapterConfig", "role", v || undefined)}
+              immediate
+              className={inputClass}
+              placeholder="operator"
+            />
+          </Field>
+
+          <Field label="Scopes (comma-separated)">
+            <DraftInput
+              value={eff("adapterConfig", "scopes", parseScopes(config.scopes ?? ["operator.admin"]))}
+              onCommit={(v) => {
+                const parsed = v
+                  .split(",")
+                  .map((entry) => entry.trim())
+                  .filter(Boolean);
+                mark("adapterConfig", "scopes", parsed.length > 0 ? parsed : undefined);
+              }}
+              immediate
+              className={inputClass}
+              placeholder="operator.admin"
+            />
+          </Field>
+
+          <Field label="Wait timeout (ms)">
+            <DraftInput
+              value={eff("adapterConfig", "waitTimeoutMs", String(config.waitTimeoutMs ?? "120000"))}
+              onCommit={(v) => {
+                const parsed = Number.parseInt(v.trim(), 10);
+                mark(
+                  "adapterConfig",
+                  "waitTimeoutMs",
+                  Number.isFinite(parsed) && parsed > 0 ? parsed : undefined,
+                );
+              }}
+              immediate
+              className={inputClass}
+              placeholder="120000"
+            />
+          </Field>
+
+          <Field label="Device auth">
+            <div className="text-xs text-muted-foreground leading-relaxed">
+              Always enabled for gateway agents. Ciutatis persists a device key during onboarding so pairing approvals
+              remain stable across runs.
+            </div>
+          </Field>
+        </>
       )}
 
       <Field label="Wait timeout (ms)">

@@ -31,13 +31,21 @@ export function ProjectWorkspacesContent({
       key: string;
       kind: "project_workspace" | "execution_workspace";
       workspaceId: string;
-      action: "start" | "stop" | "restart";
+      action: "start" | "stop" | "restart" | "run";
+      workspaceCommandId?: string | null;
+      runtimeServiceId?: string | null;
+      serviceIndex?: number | null;
     }) => {
-      setRuntimeActionKey(`${input.key}:${input.action}`);
+      setRuntimeActionKey(`${input.key}:${input.workspaceCommandId ?? input.action}:${input.action}`);
+      const target = {
+        workspaceCommandId: input.workspaceCommandId,
+        runtimeServiceId: input.runtimeServiceId,
+        serviceIndex: input.serviceIndex,
+      };
       if (input.kind === "project_workspace") {
-        return await projectsApi.controlWorkspaceRuntimeServices(projectId, input.workspaceId, input.action, companyId);
+        return await projectsApi.controlWorkspaceRuntimeServices(projectId, input.workspaceId, input.action, companyId, target);
       }
-      return await executionWorkspacesApi.controlRuntimeServices(input.workspaceId, input.action);
+      return await executionWorkspacesApi.controlRuntimeServices(input.workspaceId, input.action, target);
     },
     onSettled: () => {
       setRuntimeActionKey(null);

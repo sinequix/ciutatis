@@ -73,15 +73,15 @@ export function CompanySwitcher({ open: controlledOpen, onOpenChange }: CompanyS
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>
-          <Link to="/company/settings" className="no-underline text-inherit">
+          <Link to="/institution/settings" className="no-underline text-inherit">
             <Settings className="h-4 w-4 mr-2" />
-            Company Settings
+            Institution Settings
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link to="/companies" className="no-underline text-inherit">
+          <Link to="/institutions" className="no-underline text-inherit">
             <Plus className="h-4 w-4 mr-2" />
-            Manage Companies
+            Manage Institutions
           </Link>
         </DropdownMenuItem>
       </DropdownMenuContent>

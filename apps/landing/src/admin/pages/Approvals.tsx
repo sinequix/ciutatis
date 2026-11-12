@@ -76,7 +76,14 @@ export function Approvals() {
   ).length;
 
   if (!selectedCompanyId) {
-    return <p className="text-sm text-muted-foreground">Select a company first.</p>;
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="bg-muted/50 p-4 mb-4 rounded-md">
+          <ShieldCheck className="h-10 w-10 text-muted-foreground/50" />
+        </div>
+        <p className="text-sm text-muted-foreground">Select a company to view approvals.</p>
+      </div>
+    );
   }
 
   if (isLoading) {
@@ -106,7 +113,9 @@ export function Approvals() {
 
       {filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <ShieldCheck className="h-8 w-8 text-muted-foreground/30 mb-3" />
+          <div className="bg-muted/50 p-4 mb-4 rounded-md">
+            <ShieldCheck className="h-10 w-10 text-muted-foreground/50" />
+          </div>
           <p className="text-sm text-muted-foreground">
             {statusFilter === "pending" ? "No pending approvals." : "No approvals yet."}
           </p>
@@ -124,9 +133,6 @@ export function Approvals() {
               onReject={() => rejectMutation.mutate(approval.id)}
               detailLink={`/approvals/${approval.id}`}
               isPending={approveMutation.isPending || rejectMutation.isPending}
-              pendingAction={
-                approveMutation.isPending ? "approve" : rejectMutation.isPending ? "reject" : null
-              }
             />
           ))}
         </div>
