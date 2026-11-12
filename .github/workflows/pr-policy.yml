@@ -3,7 +3,7 @@ name: PR Policy
 on:
   pull_request:
     branches:
-      - master
+      - main
 
 concurrency:
   group: pr-policy-${{ github.event.pull_request.number }}
