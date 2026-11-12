@@ -173,6 +173,7 @@ function SearchResultRowImpl({
   return (
     <Link
       to={result.href}
+      disableIssueQuicklook
       className={cn(ROW_BASE, "py-4", isActive && "bg-muted/40", className)}
       data-result-type="issue"
     >

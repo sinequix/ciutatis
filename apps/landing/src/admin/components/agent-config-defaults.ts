@@ -1,16 +1,16 @@
 import type { CreateConfigValues } from "@paperclipai/adapter-utils";
-import { DEFAULT_CLOUDFLARE_WORKERS_AI_MODEL } from "@ciutatis/adapter-cloudflare-workers-ai";
 
 export const defaultCreateValues: CreateConfigValues = {
-  adapterType: "cloudflare_workers_ai",
+  adapterType: "claude_local",
   cwd: "",
   instructionsFilePath: "",
   promptTemplate: "",
-  model: DEFAULT_CLOUDFLARE_WORKERS_AI_MODEL,
+  model: "",
   thinkingEffort: "",
   chrome: false,
   dangerouslySkipPermissions: true,
   search: false,
+  fastMode: false,
   dangerouslyBypassSandbox: false,
   command: "",
   args: "",
@@ -25,8 +25,7 @@ export const defaultCreateValues: CreateConfigValues = {
   workspaceBranchTemplate: "",
   worktreeParentDir: "",
   runtimeServicesJson: "",
-  maxTurnsPerRun: 300,
-  fastMode: false,
+  maxTurnsPerRun: 1000,
   heartbeatEnabled: false,
   intervalSec: 300,
   // openclaw_gateway defaults

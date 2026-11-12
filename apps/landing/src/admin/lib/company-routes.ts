@@ -7,10 +7,11 @@ const BOARD_ROUTE_ROOTS = new Set([
   "org",
   "agents",
   "projects",
-  "requests",
+  "workspaces",
+  "execution-workspaces",
   "issues",
+  "routines",
   "goals",
-  "objectives",
   "artifacts",
   "approvals",
   "costs",
@@ -18,22 +19,16 @@ const BOARD_ROUTE_ROOTS = new Set([
   "activity",
   "decisions",
   "inbox",
-  "institution",
-  "institutions",
-  "execution-workspaces",
-  "search",
-  "workspaces",
-  "users",
-  "tests",
-  "design-guide",
   "board-chat",
   "artifacts",
   "u",
+  "design-guide",
+  "search",
   "settings",
   "timeline",
 ]);
 
-const GLOBAL_ROUTE_ROOTS = new Set(["auth", "invite", "board-claim", "council-claim", "docs", "instance", "app", "en", "es"]);
+const GLOBAL_ROUTE_ROOTS = new Set(["auth", "invite", "board-claim", "cli-auth", "docs", "instance"]);
 
 export function normalizeCompanyPrefix(prefix: string): string {
   return prefix.trim().toUpperCase();

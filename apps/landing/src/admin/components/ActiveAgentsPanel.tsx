@@ -1,10 +1,10 @@
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { Link } from "@/lib/router";
-import { useQuery } from "@tanstack/react-query";
-import type { Issue } from "@paperclipai/shared";
+import { useQueries, useQuery } from "@tanstack/react-query";
+import type { Issue, IssueRecoveryAction } from "@paperclipai/shared";
 import { heartbeatsApi, type LiveRunForIssue } from "../api/heartbeats";
-import { issuesApi } from "../api/issues";
 import type { TranscriptEntry } from "../adapters";
+import { issuesApi } from "../api/issues";
 import { queryKeys } from "../lib/queryKeys";
 import { cn, relativeTime } from "../lib/utils";
 import {
@@ -13,7 +13,7 @@ import {
 } from "../lib/recovery-display";
 import { ExternalLink } from "lucide-react";
 import { Identity } from "./Identity";
-import { RunTranscriptView } from "./transcript/RunTranscriptView";
+import { RunChatSurface } from "./RunChatSurface";
 import { useLiveRunTranscripts } from "./transcript/useLiveRunTranscripts";
 import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +42,11 @@ function RunCardRecoveryChip({ action }: { action: IssueRecoveryAction }) {
 }
 
 const MIN_DASHBOARD_RUNS = 4;
+const DASHBOARD_RUN_CARD_LIMIT = 4;
+const DASHBOARD_LOG_POLL_INTERVAL_MS = 15_000;
+const DASHBOARD_LOG_READ_LIMIT_BYTES = 64_000;
+const DASHBOARD_MAX_CHUNKS_PER_RUN = 40;
+const EMPTY_TRANSCRIPT: TranscriptEntry[] = [];
 
 function isRunActive(run: LiveRunForIssue): boolean {
   return run.status === "queued" || run.status === "running";
@@ -65,44 +70,61 @@ export function ActiveAgentsPanel({
   title = "Agents",
   minRunCount = MIN_DASHBOARD_RUNS,
   fetchLimit,
-  cardLimit,
+  cardLimit = DASHBOARD_RUN_CARD_LIMIT,
   gridClassName,
   cardClassName,
   emptyMessage = "No recent agent runs.",
   queryScope = "dashboard",
   showMoreLink = true,
 }: ActiveAgentsPanelProps) {
-  const { data: liveRuns } = useQuery({
-    queryKey: [...queryKeys.liveRuns(companyId), queryScope, fetchLimit ?? minRunCount],
-    queryFn: () => heartbeatsApi.liveRunsForCompany(companyId, {
-      minCount: minRunCount,
-      limit: fetchLimit,
-    }),
+  const liveRunsQueryKey = [...queryKeys.liveRuns(companyId), queryScope, { minRunCount, fetchLimit }] as const;
+  const sharedLiveRuns = useSharedPollingQuery({
+    companyId,
+    resourceKey: `live-runs:${queryScope}:${minRunCount}:${fetchLimit ?? "default"}`,
+    queryKey: liveRunsQueryKey,
+    enabled: !!companyId,
+    leaderOnly: true,
+  });
+  const { data: liveRuns, dataUpdatedAt: liveRunsUpdatedAt } = useQuery({
+    queryKey: liveRunsQueryKey,
+    queryFn: () => heartbeatsApi.liveRunsForCompany(companyId, { minCount: minRunCount, limit: fetchLimit }),
+    enabled: sharedLiveRuns.enabled,
   });
   usePublishSharedQueryData(sharedLiveRuns, liveRuns, liveRunsUpdatedAt);
 
-  const runs = (liveRuns ?? []).slice(0, cardLimit ?? minRunCount);
-  const { data: issues } = useQuery({
-    queryKey: ["active-agents-panel", companyId, "issues", runs.map((run) => run.issueId).filter(Boolean)],
-    queryFn: async () => {
-      const ids = [...new Set(runs.map((run) => run.issueId).filter((id): id is string => Boolean(id)))];
-      return Promise.all(ids.map((id) => issuesApi.get(id)));
-    },
-    enabled: runs.length > 0,
+  const runs = liveRuns ?? [];
+  const visibleRuns = useMemo(() => runs.slice(0, cardLimit), [cardLimit, runs]);
+  const hiddenRunCount = Math.max(0, runs.length - visibleRuns.length);
+  const visibleIssueIds = useMemo(
+    () => [...new Set(visibleRuns.map((run) => run.issueId).filter((issueId): issueId is string => Boolean(issueId)))],
+    [visibleRuns],
+  );
+
+  const issueQueries = useQueries({
+    queries: visibleIssueIds.map((issueId) => ({
+      queryKey: queryKeys.issues.detail(issueId),
+      queryFn: () => issuesApi.get(issueId),
+      staleTime: 30_000,
+      retry: false,
+    })),
   });
 
   const issueById = useMemo(() => {
     const map = new Map<string, Issue>();
-    for (const issue of issues ?? []) {
-      map.set(issue.id, issue);
+    for (const query of issueQueries) {
+      const issue = query.data;
+      if (issue) map.set(issue.id, issue);
     }
     return map;
-  }, [issues]);
+  }, [issueQueries]);
 
   const { transcriptByRun, hasOutputForRun } = useLiveRunTranscripts({
-    runs,
+    runs: visibleRuns,
     companyId,
-    maxChunksPerRun: 120,
+    maxChunksPerRun: DASHBOARD_MAX_CHUNKS_PER_RUN,
+    logPollIntervalMs: DASHBOARD_LOG_POLL_INTERVAL_MS,
+    logReadLimitBytes: DASHBOARD_LOG_READ_LIMIT_BYTES,
+    enableRealtimeUpdates: false,
   });
 
   return (
@@ -115,34 +137,34 @@ export function ActiveAgentsPanel({
           <p className="text-sm text-muted-foreground">{emptyMessage}</p>
         </div>
       ) : (
-        <>
-          <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4", gridClassName)}>
-            {runs.map((run) => (
-              <AgentRunCard
-                key={run.id}
-                run={run}
-                issue={run.issueId ? issueById.get(run.issueId) : undefined}
-                transcript={transcriptByRun.get(run.id) ?? []}
-                hasOutput={hasOutputForRun(run.id)}
-                isActive={isRunActive(run)}
-                className={cardClassName}
-              />
-            ))}
-          </div>
-          {showMoreLink && (liveRuns?.length ?? 0) > runs.length ? (
-            <div className="mt-3">
-              <Link to="/dashboard/live" className="text-sm text-muted-foreground hover:text-foreground">
-                {liveRuns!.length - runs.length} more active/recent runs
-              </Link>
-            </div>
-          ) : null}
-        </>
+        <div className={cn("grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4", gridClassName)}>
+          {visibleRuns.map((run) => (
+            <AgentRunCard
+              key={run.id}
+              companyId={companyId}
+              run={run}
+              issue={run.issueId ? issueById.get(run.issueId) : undefined}
+              transcript={transcriptByRun.get(run.id) ?? EMPTY_TRANSCRIPT}
+              hasOutput={hasOutputForRun(run.id)}
+              isActive={isRunActive(run)}
+              className={cardClassName}
+            />
+          ))}
+        </div>
+      )}
+      {showMoreLink && hiddenRunCount > 0 && (
+        <div className="mt-3 flex justify-end text-xs text-muted-foreground">
+          <Link to="/dashboard/live" className="hover:text-foreground hover:underline">
+            {hiddenRunCount} more active/recent run{hiddenRunCount === 1 ? "" : "s"}
+          </Link>
+        </div>
       )}
     </div>
   );
 }
 
-function AgentRunCard({
+const AgentRunCard = memo(function AgentRunCard({
+  companyId,
   run,
   issue,
   transcript,
@@ -150,6 +172,7 @@ function AgentRunCard({
   isActive,
   className,
 }: {
+  companyId: string;
   run: LiveRunForIssue;
   issue?: Issue;
   transcript: TranscriptEntry[];
@@ -215,16 +238,13 @@ function AgentRunCard({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <RunTranscriptView
-          entries={transcript}
-          density="compact"
-          limit={5}
-          streaming={isActive}
-          collapseStdout
-          thinkingClassName="!text-[10px] !leading-4"
-          emptyMessage={hasOutput ? "Waiting for transcript parsing..." : isActive ? "Waiting for output..." : "No transcript captured."}
+        <RunChatSurface
+          run={run}
+          transcript={transcript}
+          hasOutput={hasOutput}
+          companyId={companyId}
         />
       </div>
     </div>
   );
-}
+});

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "@/lib/router";
 import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
+import { getRememberedInvitePath } from "../lib/invite-memory";
 import { Button } from "@/components/ui/button";
 import { AsciiArtAnimation } from "@/components/AsciiArtAnimation";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -14,21 +15,17 @@ export function AuthPage() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const requestedMode = searchParams.get("mode") === "signup" ? "sign_up" : "sign_in";
-  const [mode, setMode] = useState<AuthMode>(requestedMode);
+  const [mode, setMode] = useState<AuthMode>("sign_in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const errorId = "auth-error";
 
-  const nextPath = useMemo(() => searchParams.get("next") || "/app", [searchParams]);
-  const isPortalContext =
-    searchParams.get("context") === "portal" ||
-    nextPath === "/portal" ||
-    nextPath.startsWith("/portal/") ||
-    nextPath === "/es/portal" ||
-    nextPath.startsWith("/es/portal/");
+  const nextPath = useMemo(
+    () => searchParams.get("next") || getRememberedInvitePath() || "/",
+    [searchParams],
+  );
   const { data: session, isLoading: isSessionLoading } = useQuery({
     queryKey: queryKeys.auth.session,
     queryFn: () => authApi.getSession(),
@@ -41,21 +38,17 @@ export function AuthPage() {
     }
   }, [session, navigate, nextPath]);
 
-  useEffect(() => {
-    setMode(requestedMode);
-  }, [requestedMode]);
-
   const mutation = useMutation({
     mutationFn: async () => {
-      if (mode === "sign_up") {
-        await authApi.signUpEmail({
-          name: name.trim(),
-          email: email.trim(),
-          password,
-        });
+      if (mode === "sign_in") {
+        await authApi.signInEmail({ email: email.trim(), password });
         return;
       }
-      await authApi.signInEmail({ email: email.trim(), password });
+      await authApi.signUpEmail({
+        name: name.trim(),
+        email: email.trim(),
+        password,
+      });
     },
     onSuccess: async () => {
       setError(null);
@@ -71,7 +64,7 @@ export function AuthPage() {
   const canSubmit =
     email.trim().length > 0 &&
     password.trim().length > 0 &&
-    (mode === "sign_in" || name.trim().length > 0);
+    (mode === "sign_in" || (name.trim().length > 0 && password.trim().length >= 8));
 
   if (isSessionLoading) {
     return (
@@ -91,61 +84,22 @@ export function AuthPage() {
         <div className="w-full max-w-md mx-auto my-auto px-8 py-12">
           <div className="flex items-center gap-2 mb-8">
             <Sparkles className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">{isPortalContext ? "Ciutatis Portal" : "Ciutatis"}</span>
+            <span className="text-sm font-medium">Paperclip</span>
           </div>
 
-          <div className="inline-flex rounded-md border border-border p-1">
-            <button
-              type="button"
-              className={`rounded px-3 py-1.5 text-sm transition-colors ${
-                mode === "sign_in"
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => {
-                setMode("sign_in");
-                setError(null);
-              }}
-            >
-              Sign in
-            </button>
-            <button
-              type="button"
-              className={`rounded px-3 py-1.5 text-sm transition-colors ${
-                mode === "sign_up"
-                  ? "bg-foreground text-background"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-              onClick={() => {
-                setMode("sign_up");
-                setError(null);
-              }}
-            >
-              Create account
-            </button>
-          </div>
-
-          <h1 className="mt-6 text-xl font-semibold">
-            {mode === "sign_up"
-              ? isPortalContext
-                ? "Create your citizen account"
-                : "Create your Ciutatis account"
-              : isPortalContext
-                ? "Sign in to continue your public request"
-                : "Sign in to Ciutatis"}
+          <h1 className="text-xl font-semibold">
+            {mode === "sign_in" ? "Sign in to Paperclip" : "Create your Paperclip account"}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {mode === "sign_up"
-              ? isPortalContext
-                ? "Use an email/password account to file requests and keep the conversation attached to your account."
-                : "Create an email/password account to access this instance."
-              : isPortalContext
-                ? "Use your email and password to continue from the public civic portal."
-                : "Use your email and password to access this instance."}
+            {mode === "sign_in"
+              ? "Use your email and password to access this instance."
+              : "Create an account for this instance. Email confirmation is not required in v1."}
           </p>
 
           <form
             className="mt-6 space-y-4"
+            method="post"
+            action={mode === "sign_up" ? "/api/auth/sign-up/email" : "/api/auth/sign-in/email"}
             onSubmit={(event) => {
               event.preventDefault();
               if (mutation.isPending) return;
@@ -158,10 +112,11 @@ export function AuthPage() {
           >
             {mode === "sign_up" && (
               <div>
-                <label className="text-xs text-muted-foreground mb-1 block">Name</label>
+                <label htmlFor="name" className="text-xs text-muted-foreground mb-1 block">Name</label>
                 <input
+                  id="name"
+                  name="name"
                   className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
-                  type="text"
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   autoComplete="name"
@@ -174,8 +129,10 @@ export function AuthPage() {
               </div>
             )}
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+              <label htmlFor="email" className="text-xs text-muted-foreground mb-1 block">Email</label>
               <input
+                id="email"
+                name="email"
                 className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
                 type="email"
                 value={email}
@@ -189,13 +146,19 @@ export function AuthPage() {
               />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Password</label>
+              <label htmlFor="password" className="text-xs text-muted-foreground mb-1 block">Password</label>
               <input
+                id="password"
+                name="password"
                 className="w-full rounded-md border border-border bg-transparent px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring placeholder:text-muted-foreground/50"
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                autoComplete={mode === "sign_up" ? "new-password" : "current-password"}
+                autoComplete={mode === "sign_in" ? "current-password" : "new-password"}
+                required
+                aria-required="true"
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? errorId : undefined}
               />
             </div>
             {error && (
@@ -209,10 +172,27 @@ export function AuthPage() {
               aria-disabled={!canSubmit || mutation.isPending}
               className={`w-full ${!canSubmit && !mutation.isPending ? "opacity-50" : ""}`}
             >
-              {mutation.isPending ? "Working…" : mode === "sign_up" ? "Create account" : "Sign In"}
+              {mutation.isPending
+                ? "Working…"
+                : mode === "sign_in"
+                  ? "Sign In"
+                  : "Create Account"}
             </Button>
           </form>
 
+          <div className="mt-5 text-sm text-muted-foreground">
+            {mode === "sign_in" ? "Need an account?" : "Already have an account?"}{" "}
+            <button
+              type="button"
+              className="font-medium text-foreground underline underline-offset-2"
+              onClick={() => {
+                setError(null);
+                setMode(mode === "sign_in" ? "sign_up" : "sign_in");
+              }}
+            >
+              {mode === "sign_in" ? "Create one" : "Sign in"}
+            </button>
+          </div>
         </div>
       </div>
 

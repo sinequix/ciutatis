@@ -1,4 +1,4 @@
-import { definePlugin, runWorker, type PluginContext } from "@paperclipai/plugin-sdk";
+import { definePlugin, runWorker, type CiutatisPlugin, type PluginContext } from "@paperclipai/plugin-sdk";
 import { workspaceDiffQuerySchema } from "./contracts.js";
 import { workspaceDiffService } from "./workspace-diff.js";
 
@@ -42,7 +42,7 @@ async function resolveProjectWorkspaceDefaultBaseRef(input: {
     : null;
 }
 
-const plugin = definePlugin({
+const plugin: CiutatisPlugin = definePlugin({
   async setup(ctx) {
     ctx.logger.info(`${PLUGIN_NAME} plugin setup`);
     const workspaceDiff = workspaceDiffService();

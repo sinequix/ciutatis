@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { FolderOpen, Loader2, LogOut, MoreHorizontal, Plus } from "lucide-react";
 import {
   DndContext,
-  PointerSensor,
+  MouseSensor,
   closestCenter,
   type DragEndEvent,
   useSensor,
@@ -17,6 +17,7 @@ import { useDialogActions } from "../context/DialogContext";
 import { useSidebar } from "../context/SidebarContext";
 import { authApi } from "../api/auth";
 import { projectsApi } from "../api/projects";
+import { SIDEBAR_SCROLL_RESET_STATE } from "../lib/navigation-scroll";
 import { queryKeys } from "../lib/queryKeys";
 import { cn, projectRouteRef, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
 import { useProjectOrder } from "../hooks/useProjectOrder";
@@ -246,46 +247,6 @@ function SortableProjectItem(props: ProjectItemProps) {
       {...attributes}
       {...listeners}
     >
-      <div className="flex flex-col gap-0.5">
-        <NavLink
-          to={`/projects/${routeRef}/issues`}
-          onClick={() => {
-            if (isMobile) setSidebarOpen(false);
-          }}
-          className={cn(
-            "flex items-center gap-2.5 px-3 py-1.5 text-[13px] font-medium transition-colors",
-            activeProjectRef === routeRef || activeProjectRef === project.id
-              ? "bg-accent text-foreground"
-              : "text-foreground/80 hover:bg-accent/50 hover:text-foreground",
-          )}
-        >
-          <span
-            className="shrink-0 h-3.5 w-3.5 rounded-sm"
-            style={{ backgroundColor: project.color ?? "#6366f1" }}
-          />
-          <span className="flex-1 truncate">{project.name}</span>
-          {project.pauseReason === "budget" ? <BudgetSidebarMarker title="Project paused by budget" /> : null}
-        </NavLink>
-        {projectSidebarSlots.length > 0 && (
-          <div className="ml-5 flex flex-col gap-0.5">
-            {projectSidebarSlots.map((slot) => (
-              <PluginSlotMount
-                key={`${project.id}:${slot.pluginKey}:${slot.id}`}
-                slot={slot}
-                context={{
-                  companyId,
-                  companyPrefix,
-                  projectId: project.id,
-                  projectRef: routeRef,
-                  entityId: project.id,
-                  entityType: "project",
-                }}
-                missingBehavior="placeholder"
-              />
-            ))}
-          </div>
-        )}
-      </div>
       <ProjectItem {...props} isDragging={isDragging} />
     </div>
   );
@@ -351,7 +312,8 @@ export function SidebarProjects() {
   const projectMatch = location.pathname.match(/^\/(?:[^/]+\/)?projects\/([^/]+)/);
   const activeProjectRef = projectMatch?.[1] ?? null;
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    // Project reordering is intentionally desktop-only; touch should remain tap/scroll behavior.
+    useSensor(MouseSensor, {
       activationConstraint: { distance: 8 },
     }),
   );

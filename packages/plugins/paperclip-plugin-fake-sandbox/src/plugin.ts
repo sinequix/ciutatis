@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { definePlugin } from "@paperclipai/plugin-sdk";
+import { definePlugin, type CiutatisPlugin } from "@paperclipai/plugin-sdk";
 import type {
   PluginEnvironmentAcquireLeaseParams,
   PluginEnvironmentCancelInteractiveSetupParams,
@@ -257,7 +257,7 @@ async function runCommand(params: PluginEnvironmentExecuteParams, timeoutMs: num
   });
 }
 
-const plugin = definePlugin({
+const plugin: CiutatisPlugin = definePlugin({
   async setup(ctx) {
     ctx.logger.info("Fake sandbox provider plugin ready");
   },

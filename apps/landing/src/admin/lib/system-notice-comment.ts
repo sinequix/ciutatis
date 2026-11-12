@@ -23,21 +23,17 @@ function metadataRowText(row: { label?: string | null }, fallback: string) {
   return label && label.length > 0 ? label : fallback;
 }
 
-function isSystemNoticeTone(value: string | undefined): value is SystemNoticeTone {
-  return value === "neutral" || value === "info" || value === "success" || value === "warning" || value === "danger";
-}
-
 function mapMetadataRow(
   row: IssueCommentMetadataRow,
   ctx: { runAgentId?: string | null },
 ): SystemNoticeMetadataRow | null {
   switch (row.type) {
     case "text":
-      return { kind: "text", label: metadataRowText(row, "Detail"), value: row.text ?? "" };
+      return { kind: "text", label: metadataRowText(row, "Detail"), value: row.text };
     case "code":
-      return { kind: "code", label: metadataRowText(row, "Code"), value: row.code ?? "" };
+      return { kind: "code", label: metadataRowText(row, "Code"), value: row.code };
     case "key_value":
-      return { kind: "text", label: metadataRowText(row, "Value"), value: row.value ?? "" };
+      return { kind: "text", label: row.label, value: row.value };
     case "issue_link": {
       const identifier = row.identifier ?? null;
       if (!identifier) {
@@ -48,29 +44,27 @@ function mapMetadataRow(
         label: metadataRowText(row, "Task"),
         identifier,
         href: `/issues/${identifier}`,
-        ...(row.title ? { title: row.title } : {}),
+        title: row.title ?? undefined,
       };
     }
     case "agent_link": {
-      const agentId = row.agentId ?? "";
-      const name = row.name?.trim() || agentId.slice(0, 8) || "agent";
+      const name = row.name?.trim() || row.agentId.slice(0, 8);
       return {
         kind: "agent",
         label: metadataRowText(row, "Agent"),
         name,
-        ...(agentId ? { href: `/agents/${agentId}` } : {}),
+        href: `/agents/${row.agentId}`,
       };
     }
     case "run_link": {
-      if (!row.runId) return null;
       const runAgentId = ctx.runAgentId ?? null;
       const href = runAgentId ? `/agents/${runAgentId}/runs/${row.runId}` : undefined;
       return {
         kind: "run",
         label: metadataRowText(row, "Run"),
         runId: row.runId,
-        ...(href ? { href } : {}),
-        ...(row.title ? { status: row.title } : {}),
+        href,
+        status: row.title ?? undefined,
       };
     }
     default:
@@ -113,9 +107,7 @@ export function buildSystemNoticeProps(input: {
   source?: SystemNoticeProps["source"];
   runAgentId?: string | null;
 }): SystemNoticeProps {
-  const tone: SystemNoticeTone = isSystemNoticeTone(input.presentation?.tone)
-    ? input.presentation.tone
-    : "neutral";
+  const tone: SystemNoticeTone = input.presentation?.tone ?? "neutral";
   const label = systemNoticeLabelForTone(tone, input.presentation?.title);
   const detailsDefaultOpen = Boolean(input.presentation?.detailsDefaultOpen);
   const sections = mapCommentMetadataToSystemNoticeSections(input.metadata, {
@@ -125,9 +117,9 @@ export function buildSystemNoticeProps(input: {
     tone,
     label,
     body: input.body,
+    metadata: sections.length > 0 ? sections : undefined,
     detailsDefaultOpen,
-    ...(sections.length > 0 ? { metadata: sections } : {}),
-    ...(input.timestamp ? { timestamp: input.timestamp } : {}),
-    ...(input.source ? { source: input.source } : {}),
+    timestamp: input.timestamp,
+    source: input.source,
   };
 }

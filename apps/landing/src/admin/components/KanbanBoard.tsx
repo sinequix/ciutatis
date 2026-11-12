@@ -183,14 +183,42 @@ function KanbanColumn({
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
 
-  return (
-    <div className="flex flex-col min-w-[260px] w-[260px] shrink-0">
-      <div className="flex items-center gap-2 px-2 py-2 mb-1">
+  const isEmpty = issues.length === 0;
+  const visibleIssues = collapsed ? [] : issues.slice(0, visibleCount);
+  const hiddenCount = Math.max(issues.length - visibleIssues.length, 0);
+  const nextRevealCount = Math.min(revealIncrement, hiddenCount);
+  const tone = getKanbanColumnTone(status);
+
+  if (collapsed) {
+    return (
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "flex min-h-(--sz-220px) w-(--sz-52px) shrink-0 flex-col items-center rounded-md border px-1.5 py-2 transition-colors",
+          tone.rail,
+          isOver && tone.railOver,
+        )}
+        title={`${statusLabel(status)}: ${issues.length}`}
+      >
         <StatusIcon status={status} />
-        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <span className={cn("mt-2 [writing-mode:vertical-rl] rotate-180 text-(length:--text-nano) font-semibold uppercase tracking-wide", tone.header)}>
           {statusLabel(status)}
         </span>
-        <span className="text-xs text-muted-foreground/60 ml-auto tabular-nums">
+        <Badge variant="ghost" className={cn("mt-auto bg-background px-1.5 text-(length:--text-nano) tabular-nums", tone.header)}>
+          {issues.length}
+        </Badge>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col shrink-0 min-w-(--sz-260px) w-(--sz-260px)">
+      <div className="flex items-center gap-2 px-3 py-2 mb-1">
+        <StatusIcon status={status} />
+        <span className={cn("text-xs font-semibold uppercase tracking-wide", tone.header)}>
+          {statusLabel(status)}
+        </span>
+        <span className={cn("ml-auto text-xs tabular-nums", tone.count)}>
           {issues.length}
         </span>
       </div>
@@ -291,6 +319,7 @@ function KanbanCard({
     >
       <Link
         to={`/issues/${issue.identifier ?? issue.id}`}
+        disableIssueQuicklook
         className="block no-underline text-inherit"
         onClick={(e) => {
           // Prevent navigation during drag

@@ -6,11 +6,41 @@ import type {
 } from "@paperclipai/shared";
 import { api } from "./client";
 
-export interface ActiveRunForIssue extends HeartbeatRun {
+export interface RunLivenessFields {
+  livenessState: HeartbeatRun["livenessState"];
+  livenessReason: string | null;
+  continuationAttempt: number;
+  lastUsefulActionAt: string | Date | null;
+  nextAction: string | null;
+}
+
+export interface ActiveRunForIssue {
+  id: string;
+  status: string;
+  invocationSource: string;
+  triggerDetail: string | null;
+  contextCommentId?: string | null;
+  contextWakeCommentId?: string | null;
+  startedAt: string | Date | null;
+  finishedAt: string | Date | null;
+  createdAt: string | Date;
   agentId: string;
   agentName: string;
   adapterType: string;
+  logBytes?: number | null;
   lastOutputBytes?: number | null;
+  issueId?: string | null;
+  livenessState?: RunLivenessFields["livenessState"];
+  livenessReason?: string | null;
+  continuationAttempt?: number;
+  lastUsefulActionAt?: string | Date | null;
+  nextAction?: string | null;
+  outputSilence?: HeartbeatRun["outputSilence"];
+  currentStatusMessage?: string | null;
+  currentStatusUpdatedAt?: string | Date | null;
+  currentToolName?: string | null;
+  lastAssistantSnippet?: string | null;
+  lastEventAt?: string | Date | null;
 }
 
 export interface LiveRunForIssue {
@@ -18,39 +48,36 @@ export interface LiveRunForIssue {
   status: string;
   invocationSource: string;
   triggerDetail: string | null;
+  contextCommentId?: string | null;
+  contextWakeCommentId?: string | null;
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
   agentId: string;
   agentName: string;
   adapterType: string;
-  issueId?: string | null;
   logBytes?: number | null;
   lastOutputBytes?: number | null;
+  issueId?: string | null;
+  livenessState?: RunLivenessFields["livenessState"];
+  livenessReason?: string | null;
+  continuationAttempt?: number;
+  lastUsefulActionAt?: string | null;
+  nextAction?: string | null;
+  outputSilence?: HeartbeatRun["outputSilence"];
+  currentStatusMessage?: string | null;
+  currentStatusUpdatedAt?: string | null;
+  currentToolName?: string | null;
+  lastAssistantSnippet?: string | null;
+  lastEventAt?: string | null;
 }
-
-export type LiveRunsForCompanyOptions = {
-  minCount?: number;
-  limit?: number;
-};
 
 export interface WatchdogDecisionInput {
   runId: string;
-  issueId?: string;
-  decision: "continue_waiting" | "stop_run" | "mark_failed" | string;
+  decision: "snooze" | "continue" | "dismissed_false_positive";
+  evaluationIssueId?: string | null;
   reason?: string | null;
-}
-
-function liveRunsForCompanyQuery(options?: number | LiveRunsForCompanyOptions) {
-  const searchParams = new URLSearchParams();
-  if (typeof options === "number") {
-    searchParams.set("minCount", String(options));
-  } else if (options) {
-    if (typeof options.minCount === "number") searchParams.set("minCount", String(options.minCount));
-    if (typeof options.limit === "number") searchParams.set("limit", String(options.limit));
-  }
-  const query = searchParams.toString();
-  return query ? `?${query}` : "";
+  snoozedUntil?: string | null;
 }
 
 export interface HeartbeatRunListOptions {
@@ -82,14 +109,31 @@ export const heartbeatsApi = {
       `/workspace-operations/${operationId}/log?offset=${encodeURIComponent(String(offset))}&limitBytes=${encodeURIComponent(String(limitBytes))}`,
     ),
   cancel: (runId: string) => api.post<void>(`/heartbeat-runs/${runId}/cancel`, {}),
+  recordWatchdogDecision: (input: WatchdogDecisionInput) =>
+    api.post(`/heartbeat-runs/${input.runId}/watchdog-decisions`, {
+      decision: input.decision,
+      evaluationIssueId: input.evaluationIssueId ?? null,
+      reason: input.reason ?? null,
+      snoozedUntil: input.snoozedUntil ?? null,
+    }),
   liveRunsForIssue: (issueId: string) =>
     api.get<LiveRunForIssue[]>(`/issues/${issueId}/live-runs`),
   activeRunForIssue: (issueId: string) =>
     api.get<ActiveRunForIssue | null>(`/issues/${issueId}/active-run`),
-  recordWatchdogDecision: (input: WatchdogDecisionInput) =>
-    api.post<void>(`/heartbeat-runs/${encodeURIComponent(input.runId)}/watchdog-decision`, input),
-  liveRunsForCompany: (companyId: string, options?: number | LiveRunsForCompanyOptions) =>
-    api.get<LiveRunForIssue[]>(`/companies/${companyId}/live-runs${liveRunsForCompanyQuery(options)}`),
+  liveRunsForCompany: (
+    companyId: string,
+    options?: number | { minCount?: number; limit?: number },
+  ) => {
+    const searchParams = new URLSearchParams();
+    if (typeof options === "number") {
+      searchParams.set("minCount", String(options));
+    } else if (options) {
+      if (options.minCount) searchParams.set("minCount", String(options.minCount));
+      if (options.limit) searchParams.set("limit", String(options.limit));
+    }
+    const qs = searchParams.toString();
+    return api.get<LiveRunForIssue[]>(`/companies/${companyId}/live-runs${qs ? `?${qs}` : ""}`);
+  },
   listInstanceSchedulerAgents: () =>
     api.get<InstanceSchedulerHeartbeatAgent[]>("/instance/scheduler-heartbeats"),
 };

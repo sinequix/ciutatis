@@ -21,11 +21,6 @@ const mockInstanceSettingsApi = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/router", () => ({
-  Link: ({ to, children, className, ...props }: any) => (
-    <a href={to} className={className} {...props}>
-      {children}
-    </a>
-  ),
   NavLink: ({ to, children, className, ...props }: {
     to: string;
     children: ReactNode;
