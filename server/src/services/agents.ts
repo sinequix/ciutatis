@@ -946,23 +946,6 @@ export function agentService(db: Db) {
         })
         .from(agentApiKeys)
         .where(eq(agentApiKeys.id, keyId));
-        .where(eq(agentApiKeys.id, keyId))
-        .then((rows) => {
-          const row = rows[0] ?? null;
-          return row
-            ? {
-              ...row,
-              scope: normalizeAgentApiKeyScope(row.scopeConfig),
-            }
-            : null;
-        }),
-
-    revokeKey: async (agentId: string, keyId: string) => {
-      const rows = await db
-        .update(agentApiKeys)
-        .set({ revokedAt: new Date() })
-        .where(and(eq(agentApiKeys.id, keyId), eq(agentApiKeys.agentId, agentId)))
-        .returning();
       return rows[0] ?? null;
     },
 

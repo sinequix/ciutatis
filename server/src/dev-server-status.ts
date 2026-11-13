@@ -1,6 +1,4 @@
 import { readFileSync } from "node:fs";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import path from "node:path";
 
 export interface DevServerStatus {
   dirty: boolean;
@@ -23,39 +21,6 @@ export interface DevServerHealthStatus {
   activeRunCount: number;
   waitingForIdle: boolean;
   lastRestartAt: string | null;
-};
-
-export type DevServerRestartRequest = {
-  requestedAt: string;
-  reason: "manual_restart_now";
-};
-
-export function getDevServerRestartRequestFilePath(
-  env: NodeJS.ProcessEnv = process.env,
-): string | null {
-  const statusFilePath = env.PAPERCLIP_DEV_SERVER_STATUS_FILE?.trim();
-  if (!statusFilePath) return null;
-  return path.join(path.dirname(statusFilePath), "dev-server-restart-request.json");
-}
-
-export function writeDevServerRestartRequest(
-  request: DevServerRestartRequest,
-  env: NodeJS.ProcessEnv = process.env,
-): boolean {
-  const filePath = getDevServerRestartRequestFilePath(env);
-  if (!filePath) return false;
-
-  mkdirSync(path.dirname(filePath), { recursive: true });
-  writeFileSync(filePath, `${JSON.stringify(request, null, 2)}\n`, "utf8");
-  return true;
-}
-
-function normalizeStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((entry): entry is string => typeof entry === "string")
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
 }
 
 export function getDevServerStatus(): DevServerStatus | null {

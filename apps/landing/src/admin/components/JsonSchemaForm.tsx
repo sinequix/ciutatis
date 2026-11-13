@@ -673,7 +673,6 @@ const SecretField = React.memo(({
       description={
         description ||
         "This secret is stored securely via the Ciutatis secret provider."
-        "Pick an existing company secret, or paste a raw value (Paperclip will store it as a secret on save)."
       }
       required={isRequired}
       error={error}

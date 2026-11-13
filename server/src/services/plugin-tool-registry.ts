@@ -116,7 +116,6 @@ export interface PluginToolRegistry {
    *   dispatch fails with `worker for plugin X is not running`.
    */
   registerPlugin(pluginId: string, manifest: CiutatisPluginManifestV1, pluginDbId?: string): void;
-  registerPlugin(pluginId: string, manifest: PaperclipPluginManifestV1, pluginDbId: string): void;
 
   /**
    * Remove all tool registrations for a plugin.
@@ -301,17 +300,6 @@ export function createPluginToolRegistry(
   return {
     registerPlugin(pluginId: string, manifest: CiutatisPluginManifestV1, pluginDbId?: string): void {
       const dbId = pluginDbId ?? pluginId;
-    registerPlugin(pluginId: string, manifest: PaperclipPluginManifestV1, pluginDbId: string): void {
-      // Guard at the registry boundary so a missing UUID surfaces as an
-      // explicit contract error instead of a downstream
-      // `worker for plugin X is not running`.
-      if (!pluginDbId) {
-        throw new Error(
-          `plugin-tool-registry.registerPlugin: pluginDbId is required (pluginId="${pluginId}"). ` +
-            `Workers are keyed by DB UUID; omitting this guarantees worker-lookup failure.`,
-        );
-      }
-      const dbId = pluginDbId;
 
       // Remove any previously registered tools for this plugin (idempotent)
       const previousCount = removePluginTools(pluginId);

@@ -104,9 +104,6 @@ export function environmentRoutes(
     config: Record<string, unknown> | null;
     metadata?: Record<string, unknown> | null;
   }>(environment: T): T & { configRedacted: true; metadataRedacted: true } {
-    envVars?: Record<string, unknown> | null;
-    metadata: Record<string, unknown> | null;
-  }>(environment: T): T {
     return {
       ...environment,
       config: {},
@@ -385,11 +382,6 @@ export function environmentRoutes(
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
     const pluginDrivers = await listReadyPluginEnvironmentDrivers();
-    assertCanReadInstanceEnvironments(req);
-    const pluginDrivers = await listReadyPluginEnvironmentDrivers({
-      db,
-      workerManager: options.pluginWorkerManager,
-    });
     res.json(getEnvironmentCapabilities(
       AGENT_ADAPTER_TYPES,
       {
@@ -728,7 +720,6 @@ export function environmentRoutes(
     if (!canReadConfigs) {
       throw forbidden("Missing permission: environments:manage");
     }
-    assertCanReadInstanceEnvironments(req);
     res.json(lease);
   });
 

@@ -25,17 +25,6 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { PageTabBar } from "../components/PageTabBar";
 import { projectRouteRef, cn } from "../lib/utils";
 import { buildProjectWorkspaceSummaries } from "../lib/project-workspaces-tab";
-import { ProjectWorkspacesContent } from "../components/ProjectWorkspacesContent";
-import { MembershipAction } from "../components/MembershipAction";
-import { StarToggle } from "../components/StarToggle";
-import { collectLiveIssueIds } from "../lib/liveIssueIds";
-import { projectRouteRef } from "../lib/utils";
-import { PROJECT_ICONS } from "../lib/project-icons";
-import { usePublishSharedQueryData, useSharedPollingQuery } from "../hooks/useSharedPolling";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/tabs";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { PluginSlotMount, PluginSlotOutlet, usePluginSlots } from "@/plugins/slots";
@@ -250,12 +239,6 @@ function ProjectIssuesList({ projectId, companyId }: { projectId: string; compan
     enabled: sharedLiveRuns.enabled,
     refetchInterval: sharedLiveRuns.refetchInterval,
   });
-  usePublishSharedQueryData(sharedLiveRuns, liveRuns, liveRunsUpdatedAt);
-  const { data: projects } = useQuery({
-    queryKey: queryKeys.projects.list(companyId),
-    queryFn: () => projectsApi.list(companyId),
-    enabled: !!companyId,
-  });
 
   const liveIssueIds = useMemo(() => {
     const ids = new Set<string>();
@@ -310,29 +293,6 @@ function ProjectPluginOperationsList({
     queryFn: () => agentsApi.list(companyId),
     enabled: !!companyId,
   });
-  const { data: projects } = useQuery({
-    queryKey: queryKeys.projects.list(companyId),
-    queryFn: () => projectsApi.list(companyId),
-    enabled: !!companyId,
-  });
-  const liveRunsQueryKey = queryKeys.liveRuns(companyId);
-  const sharedLiveRuns = useSharedPollingQuery({
-    companyId,
-    resourceKey: "live-runs",
-    queryKey: liveRunsQueryKey,
-    enabled: !!companyId,
-    refetchInterval: 5000,
-    leaderOnly: true,
-  });
-  const { data: liveRuns, dataUpdatedAt: liveRunsUpdatedAt } = useQuery({
-    queryKey: liveRunsQueryKey,
-    queryFn: () => heartbeatsApi.liveRunsForCompany(companyId),
-    enabled: sharedLiveRuns.enabled,
-    refetchInterval: sharedLiveRuns.refetchInterval,
-  });
-  usePublishSharedQueryData(sharedLiveRuns, liveRuns, liveRunsUpdatedAt);
-  const liveIssueIds = useMemo(() => collectLiveIssueIds(liveRuns), [liveRuns]);
-
   const { data: issues, isLoading, error } = useQuery({
     queryKey: originKindPrefix
       ? queryKeys.issues.listPluginOperationsByProject(companyId, project.id, originKindPrefix)
@@ -418,15 +378,6 @@ export function ProjectDetail() {
   const canonicalProjectRef = project ? projectRouteRef(project) : routeProjectRef;
   const projectLookupRef = project?.id ?? routeProjectRef;
   const resolvedCompanyId = project?.companyId ?? selectedCompanyId;
-  const membershipsQuery = useResourceMemberships(resolvedCompanyId);
-  const membershipMutation = useResourceMembershipMutation(resolvedCompanyId);
-  const projectMembershipState = project?.id
-    ? resourceMembershipState(membershipsQuery.data, "project", project.id)
-    : "joined";
-  const experimentalSettingsQuery = useQuery({
-    queryKey: queryKeys.instance.experimentalSettings,
-    queryFn: () => instanceSettingsApi.getExperimental(),
-  });
   const {
     slots: pluginDetailSlots,
     isLoading: pluginDetailSlotsLoading,
@@ -803,12 +754,6 @@ export function ProjectDetail() {
               Paused by budget hard stop
             </div>
           ) : null}
-          {project.managedByPlugin ? (
-            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted px-3 py-1 text-(length:--text-micro) font-medium text-muted-foreground">
-              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: project.color ?? "var(--project-seed)" }} />
-              Managed by {project.managedByPlugin.pluginDisplayName}
-            </div>
-          ) : null}
         </div>
         <div className="ml-auto flex items-center gap-2">
           <StarToggle
@@ -861,8 +806,6 @@ export function ProjectDetail() {
         <PageTabBar
           items={[
             { value: "list", label: "Issues" },
-            { value: "list", label: "Tasks" },
-            { value: "overview", label: "Overview" },
             ...(project.managedByPlugin ? [{ value: "plugin-operations", label: "Plugin operations" }] : []),
             { value: "workspaces", label: "Workspaces" },
             { value: "overview", label: "Overview" },

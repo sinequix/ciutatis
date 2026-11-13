@@ -11,18 +11,6 @@ export interface ActiveRunForIssue extends HeartbeatRun {
   agentName: string;
   adapterType: string;
   lastOutputBytes?: number | null;
-  issueId?: string | null;
-  livenessState?: RunLivenessFields["livenessState"];
-  livenessReason?: string | null;
-  continuationAttempt?: number;
-  lastUsefulActionAt?: string | Date | null;
-  nextAction?: string | null;
-  outputSilence?: HeartbeatRun["outputSilence"];
-  currentStatusMessage?: string | null;
-  currentStatusUpdatedAt?: string | Date | null;
-  currentToolName?: string | null;
-  lastAssistantSnippet?: string | null;
-  lastEventAt?: string | Date | null;
 }
 
 export interface LiveRunForIssue {
@@ -39,18 +27,6 @@ export interface LiveRunForIssue {
   issueId?: string | null;
   logBytes?: number | null;
   lastOutputBytes?: number | null;
-  issueId?: string | null;
-  livenessState?: RunLivenessFields["livenessState"];
-  livenessReason?: string | null;
-  continuationAttempt?: number;
-  lastUsefulActionAt?: string | null;
-  nextAction?: string | null;
-  outputSilence?: HeartbeatRun["outputSilence"];
-  currentStatusMessage?: string | null;
-  currentStatusUpdatedAt?: string | null;
-  currentToolName?: string | null;
-  lastAssistantSnippet?: string | null;
-  lastEventAt?: string | null;
 }
 
 export type LiveRunsForCompanyOptions = {

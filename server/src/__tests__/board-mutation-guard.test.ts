@@ -4,10 +4,6 @@ import request from "supertest";
 import { boardMutationGuard } from "../middleware/board-mutation-guard.js";
 
 function createApp(actorType: "board" | "agent", boardSource: "session" | "local_implicit" = "session") {
-function createApp(
-  actorType: "board" | "agent",
-  boardSource: "session" | "local_implicit" | "board_key" | "cloud_tenant" = "session",
-) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {

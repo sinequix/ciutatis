@@ -86,608 +86,6 @@ function parseAgents(input: string | undefined): "all" | string[] {
 }
 
 function isHttpUrl(input: string): boolean {
-function parseCsvValues(input: string | undefined): string[] {
-  if (!input || !input.trim()) return [];
-  return Array.from(new Set(input.split(",").map((part) => part.trim()).filter(Boolean)));
-}
-
-function isInteractiveTerminal(): boolean {
-  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
-}
-
-function resolveImportInclude(input: string | undefined): CompanyPortabilityInclude {
-  return parseInclude(input, DEFAULT_IMPORT_INCLUDE);
-}
-
-function normalizePortablePath(filePath: string): string {
-  return filePath.replace(/\\/g, "/");
-}
-
-function shouldIncludePortableFile(filePath: string): boolean {
-  const baseName = path.basename(filePath);
-  const isMarkdown = baseName.endsWith(".md");
-  const isPaperclipYaml = baseName === ".paperclip.yaml" || baseName === ".paperclip.yml";
-  const contentType = binaryContentTypeByExtension[path.extname(baseName).toLowerCase()];
-  return isMarkdown || isPaperclipYaml || Boolean(contentType);
-}
-
-function findPortableExtensionPath(files: Record<string, CompanyPortabilityFileEntry>): string | null {
-  if (files[".paperclip.yaml"] !== undefined) return ".paperclip.yaml";
-  if (files[".paperclip.yml"] !== undefined) return ".paperclip.yml";
-  return Object.keys(files).find((entry) => entry.endsWith("/.paperclip.yaml") || entry.endsWith("/.paperclip.yml")) ?? null;
-}
-
-function collectFilesUnderDirectory(
-  files: Record<string, CompanyPortabilityFileEntry>,
-  directory: string,
-  opts?: { excludePrefixes?: string[] },
-): string[] {
-  const normalizedDirectory = normalizePortablePath(directory).replace(/\/+$/, "");
-  if (!normalizedDirectory) return [];
-  const prefix = `${normalizedDirectory}/`;
-  const excluded = (opts?.excludePrefixes ?? []).map((entry) => normalizePortablePath(entry).replace(/\/+$/, "")).filter(Boolean);
-  return Object.keys(files)
-    .map(normalizePortablePath)
-    .filter((filePath) => filePath.startsWith(prefix))
-    .filter((filePath) => !excluded.some((excludePrefix) => filePath.startsWith(`${excludePrefix}/`)))
-    .sort((left, right) => left.localeCompare(right));
-}
-
-function collectEntityFiles(
-  files: Record<string, CompanyPortabilityFileEntry>,
-  entryPath: string,
-  opts?: { excludePrefixes?: string[] },
-): string[] {
-  const normalizedPath = normalizePortablePath(entryPath);
-  const directory = normalizedPath.includes("/") ? normalizedPath.slice(0, normalizedPath.lastIndexOf("/")) : "";
-  const selected = new Set<string>([normalizedPath]);
-  if (directory) {
-    for (const filePath of collectFilesUnderDirectory(files, directory, opts)) {
-      selected.add(filePath);
-    }
-  }
-  return Array.from(selected).sort((left, right) => left.localeCompare(right));
-}
-
-export function buildImportSelectionCatalog(preview: CompanyPortabilityPreviewResult): ImportSelectionCatalog {
-  const selectedAgentSlugs = new Set(preview.selectedAgentSlugs);
-  const companyFiles = new Set<string>();
-  const companyPath = preview.manifest.company?.path ? normalizePortablePath(preview.manifest.company.path) : null;
-  if (companyPath) {
-    companyFiles.add(companyPath);
-  }
-  const readmePath = Object.keys(preview.files).find((entry) => normalizePortablePath(entry) === "README.md");
-  if (readmePath) {
-    companyFiles.add(normalizePortablePath(readmePath));
-  }
-  const logoPath = preview.manifest.company?.logoPath ? normalizePortablePath(preview.manifest.company.logoPath) : null;
-  if (logoPath && preview.files[logoPath] !== undefined) {
-    companyFiles.add(logoPath);
-  }
-
-  return {
-    company: {
-      includedByDefault: preview.include.company && preview.manifest.company !== null,
-      files: Array.from(companyFiles).sort((left, right) => left.localeCompare(right)),
-    },
-    projects: preview.manifest.projects.map((project) => {
-      const projectPath = normalizePortablePath(project.path);
-      const projectDir = projectPath.includes("/") ? projectPath.slice(0, projectPath.lastIndexOf("/")) : "";
-      return {
-        key: project.slug,
-        label: project.name,
-        hint: project.slug,
-        files: collectEntityFiles(preview.files, projectPath, {
-          excludePrefixes: projectDir ? [`${projectDir}/issues`] : [],
-        }),
-      };
-    }),
-    issues: preview.manifest.issues.map((issue) => ({
-      key: issue.slug,
-      label: issue.title,
-      hint: issue.identifier ?? issue.slug,
-      files: collectEntityFiles(preview.files, normalizePortablePath(issue.path)),
-    })),
-    agents: preview.manifest.agents
-      .filter((agent) => selectedAgentSlugs.size === 0 || selectedAgentSlugs.has(agent.slug))
-      .map((agent) => ({
-        key: agent.slug,
-        label: agent.name,
-        hint: agent.slug,
-        files: collectEntityFiles(preview.files, normalizePortablePath(agent.path)),
-      })),
-    skills: preview.manifest.skills.map((skill) => ({
-      key: skill.slug,
-      label: skill.name,
-      hint: skill.slug,
-      files: collectEntityFiles(preview.files, normalizePortablePath(skill.path)),
-    })),
-    extensionPath: findPortableExtensionPath(preview.files),
-  };
-}
-
-function toKeySet(items: Array<{ key: string }>): Set<string> {
-  return new Set(items.map((item) => item.key));
-}
-
-export function buildDefaultImportSelectionState(catalog: ImportSelectionCatalog): ImportSelectionState {
-  return {
-    company: catalog.company.includedByDefault,
-    projects: toKeySet(catalog.projects),
-    issues: toKeySet(catalog.issues),
-    agents: toKeySet(catalog.agents),
-    skills: toKeySet(catalog.skills),
-  };
-}
-
-function countSelected(state: ImportSelectionState, group: ImportSelectableGroup): number {
-  return state[group].size;
-}
-
-function countTotal(catalog: ImportSelectionCatalog, group: ImportSelectableGroup): number {
-  return catalog[group].length;
-}
-
-function summarizeGroupSelection(catalog: ImportSelectionCatalog, state: ImportSelectionState, group: ImportSelectableGroup): string {
-  return `${countSelected(state, group)}/${countTotal(catalog, group)} selected`;
-}
-
-function getGroupLabel(group: ImportSelectableGroup): string {
-  switch (group) {
-    case "projects":
-      return "Projects";
-    case "issues":
-      return "Tasks";
-    case "agents":
-      return "Agents";
-    case "skills":
-      return "Skills";
-  }
-}
-
-export function buildSelectedFilesFromImportSelection(
-  catalog: ImportSelectionCatalog,
-  state: ImportSelectionState,
-): string[] {
-  const selected = new Set<string>();
-
-  if (state.company) {
-    for (const filePath of catalog.company.files) {
-      selected.add(normalizePortablePath(filePath));
-    }
-  }
-
-  for (const group of ["projects", "issues", "agents", "skills"] as const) {
-    const selectedKeys = state[group];
-    for (const item of catalog[group]) {
-      if (!selectedKeys.has(item.key)) continue;
-      for (const filePath of item.files) {
-        selected.add(normalizePortablePath(filePath));
-      }
-    }
-  }
-
-  if (selected.size > 0 && catalog.extensionPath) {
-    selected.add(normalizePortablePath(catalog.extensionPath));
-  }
-
-  return Array.from(selected).sort((left, right) => left.localeCompare(right));
-}
-
-export function buildDefaultImportAdapterOverrides(
-  preview: Pick<CompanyPortabilityPreviewResult, "manifest" | "selectedAgentSlugs">,
-): Record<string, { adapterType: string }> | undefined {
-  const selectedAgentSlugs = new Set(preview.selectedAgentSlugs);
-  const overrides = Object.fromEntries(
-    preview.manifest.agents
-      .filter((agent) => selectedAgentSlugs.size === 0 || selectedAgentSlugs.has(agent.slug))
-      .filter((agent) => agent.adapterType === "process")
-      .map((agent) => [
-        agent.slug,
-        {
-          // TODO: replace this temporary claude_local fallback with adapter selection in the import TUI.
-          adapterType: "claude_local",
-        },
-      ]),
-  );
-  return Object.keys(overrides).length > 0 ? overrides : undefined;
-}
-
-function buildDefaultImportAdapterMessages(
-  overrides: Record<string, { adapterType: string }> | undefined,
-): string[] {
-  if (!overrides) return [];
-  const adapterTypes = Array.from(new Set(Object.values(overrides).map((override) => override.adapterType)))
-    .map((adapterType) => adapterType.replace(/_/g, "-"));
-  const agentCount = Object.keys(overrides).length;
-  return [
-    `Using ${adapterTypes.join(", ")} adapter${adapterTypes.length === 1 ? "" : "s"} for ${agentCount} imported ${pluralize(agentCount, "agent")} without an explicit adapter.`,
-  ];
-}
-
-async function promptForImportSelection(preview: CompanyPortabilityPreviewResult): Promise<string[]> {
-  const catalog = buildImportSelectionCatalog(preview);
-  const state = buildDefaultImportSelectionState(catalog);
-
-  while (true) {
-    const choice = await p.select<ImportSelectableGroup | "company" | "confirm">({
-      message: "Select what Paperclip should import",
-      options: [
-        {
-          value: "company",
-          label: state.company ? "Company: included" : "Company: skipped",
-          hint: catalog.company.files.length > 0 ? "toggle company metadata" : "no company metadata in package",
-        },
-        {
-          value: "projects",
-          label: "Select Projects",
-          hint: summarizeGroupSelection(catalog, state, "projects"),
-        },
-        {
-          value: "issues",
-          label: "Select Tasks",
-          hint: summarizeGroupSelection(catalog, state, "issues"),
-        },
-        {
-          value: "agents",
-          label: "Select Agents",
-          hint: summarizeGroupSelection(catalog, state, "agents"),
-        },
-        {
-          value: "skills",
-          label: "Select Skills",
-          hint: summarizeGroupSelection(catalog, state, "skills"),
-        },
-        {
-          value: "confirm",
-          label: "Confirm",
-          hint: `${buildSelectedFilesFromImportSelection(catalog, state).length} files selected`,
-        },
-      ],
-      initialValue: "confirm",
-    });
-
-    if (p.isCancel(choice)) {
-      p.cancel("Import cancelled.");
-      process.exit(0);
-    }
-
-    if (choice === "confirm") {
-      const selectedFiles = buildSelectedFilesFromImportSelection(catalog, state);
-      if (selectedFiles.length === 0) {
-        p.note("Select at least one import target before confirming.", "Nothing selected");
-        continue;
-      }
-      return selectedFiles;
-    }
-
-    if (choice === "company") {
-      if (catalog.company.files.length === 0) {
-        p.note("This package does not include company metadata to toggle.", "No company metadata");
-        continue;
-      }
-      state.company = !state.company;
-      continue;
-    }
-
-    const group = choice;
-    const groupItems = catalog[group];
-    if (groupItems.length === 0) {
-      p.note(`This package does not include any ${getGroupLabel(group).toLowerCase()}.`, `No ${getGroupLabel(group)}`);
-      continue;
-    }
-
-    const selection = await p.multiselect<string>({
-      message: `${getGroupLabel(group)} to import. Space toggles, enter returns to the main menu.`,
-      options: groupItems.map((item) => ({
-        value: item.key,
-        label: item.label,
-        hint: item.hint,
-      })),
-      initialValues: Array.from(state[group]),
-    });
-
-    if (p.isCancel(selection)) {
-      p.cancel("Import cancelled.");
-      process.exit(0);
-    }
-
-    state[group] = new Set(selection);
-  }
-}
-
-function summarizeInclude(include: CompanyPortabilityInclude): string {
-  const labels = IMPORT_INCLUDE_OPTIONS
-    .filter((option) => include[option.value])
-    .map((option) => option.label.toLowerCase());
-  return labels.length > 0 ? labels.join(", ") : "nothing selected";
-}
-
-function formatSourceLabel(source: { type: "inline"; rootPath?: string | null } | { type: "github"; url: string }): string {
-  if (source.type === "github") {
-    return `GitHub: ${source.url}`;
-  }
-  return `Local package: ${source.rootPath?.trim() || "(current folder)"}`;
-}
-
-function formatTargetLabel(
-  target: { mode: "existing_company"; companyId?: string | null } | { mode: "new_company"; newCompanyName?: string | null },
-  preview?: CompanyPortabilityPreviewResult,
-): string {
-  if (target.mode === "existing_company") {
-    const targetName = preview?.targetCompanyName?.trim();
-    const targetId = preview?.targetCompanyId?.trim() || target.companyId?.trim() || "unknown-company";
-    return targetName ? `${targetName} (${targetId})` : targetId;
-  }
-  return target.newCompanyName?.trim() || preview?.manifest.company?.name || "new company";
-}
-
-function pluralize(count: number, singular: string, plural = `${singular}s`): string {
-  return count === 1 ? singular : plural;
-}
-
-function summarizePlanCounts(
-  plans: Array<{ action: "create" | "update" | "skip" }>,
-  noun: string,
-): string {
-  if (plans.length === 0) return `0 ${pluralize(0, noun)} selected`;
-  const createCount = plans.filter((plan) => plan.action === "create").length;
-  const updateCount = plans.filter((plan) => plan.action === "update").length;
-  const skipCount = plans.filter((plan) => plan.action === "skip").length;
-  const parts: string[] = [];
-  if (createCount > 0) parts.push(`${createCount} create`);
-  if (updateCount > 0) parts.push(`${updateCount} update`);
-  if (skipCount > 0) parts.push(`${skipCount} skip`);
-  return `${plans.length} ${pluralize(plans.length, noun)} total (${parts.join(", ")})`;
-}
-
-function summarizeImportAgentResults(agents: CompanyPortabilityImportResult["agents"]): string {
-  if (agents.length === 0) return "0 agents changed";
-  const created = agents.filter((agent) => agent.action === "created").length;
-  const updated = agents.filter((agent) => agent.action === "updated").length;
-  const skipped = agents.filter((agent) => agent.action === "skipped").length;
-  const parts: string[] = [];
-  if (created > 0) parts.push(`${created} created`);
-  if (updated > 0) parts.push(`${updated} updated`);
-  if (skipped > 0) parts.push(`${skipped} skipped`);
-  return `${agents.length} ${pluralize(agents.length, "agent")} total (${parts.join(", ")})`;
-}
-
-function summarizeImportProjectResults(projects: CompanyPortabilityImportResult["projects"]): string {
-  if (projects.length === 0) return "0 projects changed";
-  const created = projects.filter((project) => project.action === "created").length;
-  const updated = projects.filter((project) => project.action === "updated").length;
-  const skipped = projects.filter((project) => project.action === "skipped").length;
-  const parts: string[] = [];
-  if (created > 0) parts.push(`${created} created`);
-  if (updated > 0) parts.push(`${updated} updated`);
-  if (skipped > 0) parts.push(`${skipped} skipped`);
-  return `${projects.length} ${pluralize(projects.length, "project")} total (${parts.join(", ")})`;
-}
-
-function actionChip(action: string): string {
-  switch (action) {
-    case "create":
-    case "created":
-      return pc.green(action);
-    case "update":
-    case "updated":
-      return pc.yellow(action);
-    case "skip":
-    case "skipped":
-    case "none":
-    case "unchanged":
-      return pc.dim(action);
-    default:
-      return action;
-  }
-}
-
-function appendPreviewExamples(
-  lines: string[],
-  title: string,
-  entries: Array<{ action: string; label: string; reason?: string | null }>,
-): void {
-  if (entries.length === 0) return;
-  lines.push("");
-  lines.push(pc.bold(title));
-  const shown = entries.slice(0, IMPORT_PREVIEW_SAMPLE_LIMIT);
-  for (const entry of shown) {
-    const reason = entry.reason?.trim() ? pc.dim(` (${entry.reason.trim()})`) : "";
-    lines.push(`- ${actionChip(entry.action)} ${entry.label}${reason}`);
-  }
-  if (entries.length > shown.length) {
-    lines.push(pc.dim(`- +${entries.length - shown.length} more`));
-  }
-}
-
-function appendMessageBlock(lines: string[], title: string, messages: string[]): void {
-  if (messages.length === 0) return;
-  lines.push("");
-  lines.push(pc.bold(title));
-  for (const message of messages) {
-    lines.push(`- ${message}`);
-  }
-}
-
-export function renderCompanyImportPreview(
-  preview: CompanyPortabilityPreviewResult,
-  meta: {
-    sourceLabel: string;
-    targetLabel: string;
-    infoMessages?: string[];
-  },
-): string {
-  const lines: string[] = [
-    `${pc.bold("Source")}  ${meta.sourceLabel}`,
-    `${pc.bold("Target")}  ${meta.targetLabel}`,
-    `${pc.bold("Include")} ${summarizeInclude(preview.include)}`,
-    `${pc.bold("Mode")}    ${preview.collisionStrategy} collisions`,
-    "",
-    pc.bold("Package"),
-    `- company: ${preview.manifest.company?.name ?? preview.manifest.source?.companyName ?? "not included"}`,
-    `- agents: ${preview.manifest.agents.length}`,
-    `- projects: ${preview.manifest.projects.length}`,
-    `- tasks: ${preview.manifest.issues.length}`,
-    `- skills: ${preview.manifest.skills.length}`,
-  ];
-
-  if (preview.envInputs.length > 0) {
-    const requiredCount = preview.envInputs.filter((item) => item.requirement === "required").length;
-    lines.push(`- env inputs: ${preview.envInputs.length} (${requiredCount} required)`);
-  }
-
-  lines.push("");
-  lines.push(pc.bold("Plan"));
-  lines.push(`- company: ${actionChip(preview.plan.companyAction === "none" ? "unchanged" : preview.plan.companyAction)}`);
-  lines.push(`- agents: ${summarizePlanCounts(preview.plan.agentPlans, "agent")}`);
-  lines.push(`- projects: ${summarizePlanCounts(preview.plan.projectPlans, "project")}`);
-  lines.push(`- tasks: ${summarizePlanCounts(preview.plan.issuePlans, "task")}`);
-  if (preview.include.skills) {
-    lines.push(`- skills: ${preview.manifest.skills.length} ${pluralize(preview.manifest.skills.length, "skill")} packaged`);
-  }
-
-  appendPreviewExamples(
-    lines,
-    "Agent examples",
-    preview.plan.agentPlans.map((plan) => ({
-      action: plan.action,
-      label: `${plan.slug} -> ${plan.plannedName}`,
-      reason: plan.reason,
-    })),
-  );
-  appendPreviewExamples(
-    lines,
-    "Project examples",
-    preview.plan.projectPlans.map((plan) => ({
-      action: plan.action,
-      label: `${plan.slug} -> ${plan.plannedName}`,
-      reason: plan.reason,
-    })),
-  );
-  appendPreviewExamples(
-    lines,
-    "Task examples",
-    preview.plan.issuePlans.map((plan) => ({
-      action: plan.action,
-      label: `${plan.slug} -> ${plan.plannedTitle}`,
-      reason: plan.reason,
-    })),
-  );
-
-  appendMessageBlock(lines, pc.cyan("Info"), meta.infoMessages ?? []);
-  appendMessageBlock(lines, pc.yellow("Warnings"), preview.warnings);
-  appendMessageBlock(lines, pc.red("Errors"), preview.errors);
-
-  return lines.join("\n");
-}
-
-export function renderCompanyImportResult(
-  result: CompanyPortabilityImportResult,
-  meta: { targetLabel: string; companyUrl?: string; infoMessages?: string[] },
-): string {
-  const lines: string[] = [
-    `${pc.bold("Target")}  ${meta.targetLabel}`,
-    `${pc.bold("Company")} ${result.company.name} (${actionChip(result.company.action)})`,
-    `${pc.bold("Agents")}  ${summarizeImportAgentResults(result.agents)}`,
-    `${pc.bold("Projects")} ${summarizeImportProjectResults(result.projects)}`,
-  ];
-
-  if (meta.companyUrl) {
-    lines.splice(1, 0, `${pc.bold("URL")}     ${meta.companyUrl}`);
-  }
-
-  appendPreviewExamples(
-    lines,
-    "Agent results",
-    result.agents.map((agent) => ({
-      action: agent.action,
-      label: `${agent.slug} -> ${agent.name}`,
-      reason: agent.reason,
-    })),
-  );
-  appendPreviewExamples(
-    lines,
-    "Project results",
-    result.projects.map((project) => ({
-      action: project.action,
-      label: `${project.slug} -> ${project.name}`,
-      reason: project.reason,
-    })),
-  );
-
-  if (result.envInputs.length > 0) {
-    lines.push("");
-    lines.push(pc.bold("Env inputs"));
-    lines.push(
-      `- ${result.envInputs.length} ${pluralize(result.envInputs.length, "input")} may need values after import`,
-    );
-  }
-
-  appendMessageBlock(lines, pc.cyan("Info"), meta.infoMessages ?? []);
-  appendMessageBlock(lines, pc.yellow("Warnings"), result.warnings);
-
-  return lines.join("\n");
-}
-
-function printCompanyImportView(title: string, body: string, opts?: { interactive?: boolean }): void {
-  if (opts?.interactive) {
-    p.note(body, title);
-    return;
-  }
-  console.log(pc.bold(title));
-  console.log(body);
-}
-
-export function resolveCompanyImportApiPath(input: {
-  dryRun: boolean;
-  targetMode: "new_company" | "existing_company";
-  companyId?: string | null;
-}): string {
-  if (input.targetMode === "existing_company") {
-    const companyId = input.companyId?.trim();
-    if (!companyId) {
-      throw new Error("Existing-company imports require a companyId to resolve the API route.");
-    }
-    return input.dryRun
-      ? apiPath`/api/companies/${companyId}/imports/preview`
-      : apiPath`/api/companies/${companyId}/imports/apply`;
-  }
-
-  return input.dryRun ? "/api/companies/import/preview" : "/api/companies/import";
-}
-
-export function buildCompanyDashboardUrl(apiBase: string, issuePrefix: string): string {
-  const url = new URL(apiBase);
-  const normalizedPrefix = issuePrefix.trim().replace(/^\/+|\/+$/g, "");
-  url.pathname = `${url.pathname.replace(/\/+$/, "")}/${normalizedPrefix}/dashboard`;
-  url.search = "";
-  url.hash = "";
-  return url.toString();
-}
-
-export function resolveCompanyImportApplyConfirmationMode(input: {
-  yes?: boolean;
-  interactive: boolean;
-  json: boolean;
-}): "skip" | "prompt" {
-  if (input.yes) {
-    return "skip";
-  }
-  if (input.json) {
-    throw new Error(
-      "Applying a company import with --json requires --yes. Use --dry-run first to inspect the preview.",
-    );
-  }
-  if (!input.interactive) {
-    throw new Error(
-      "Applying a company import from a non-interactive terminal requires --yes. Use --dry-run first to inspect the preview.",
-    );
-  }
-  return "prompt";
-}
-
-export function isHttpUrl(input: string): boolean {
   return /^https?:\/\//i.test(input.trim());
 }
 
@@ -731,43 +129,6 @@ export async function writeExportToFolder(outDir: string, exported: CompanyPorta
     const filePath = resolveExportOutputPath(root, normalized);
     await mkdir(path.dirname(filePath), { recursive: true });
     await writeFile(filePath, content, "utf8");
-    const writeValue = portableFileEntryToWriteValue(content);
-    if (typeof writeValue === "string") {
-      await writeFile(filePath, writeValue, "utf8");
-    } else {
-      await writeFile(filePath, writeValue);
-    }
-  }
-}
-
-export function resolveExportOutputPath(root: string, relativePath: string): string {
-  const resolvedRoot = path.resolve(root);
-  const filePath = path.resolve(resolvedRoot, relativePath);
-  const rootPrefix = resolvedRoot.endsWith(path.sep) ? resolvedRoot : `${resolvedRoot}${path.sep}`;
-  if (filePath !== resolvedRoot && !filePath.startsWith(rootPrefix)) {
-    throw new Error(`Refusing to write export file outside output directory: ${relativePath}`);
-  return filePath;
-
-async function confirmOverwriteExportDirectory(outDir: string): Promise<void> {
-  const root = path.resolve(outDir);
-  const stats = await stat(root).catch(() => null);
-  if (!stats) return;
-  if (!stats.isDirectory()) {
-    throw new Error(`Export output path ${root} exists and is not a directory.`);
-
-  const entries = await readdir(root);
-  if (entries.length === 0) return;
-
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
-    throw new Error(`Export output directory ${root} already contains files. Re-run interactively or choose an empty directory.`);
-
-  const confirmed = await p.confirm({
-    message: `Overwrite existing files in ${root}?`,
-    initialValue: false,
-  });
-
-  if (p.isCancel(confirmed) || !confirmed) {
-    throw new Error("Export cancelled.");
   }
 }
 
@@ -904,6 +265,104 @@ export function registerCompanyCommands(program: Command): void {
 
   addCommonClientOptions(
     company
+      .command("current")
+      .description("Get the current scoped company from --company-id, context, env, or agent authentication")
+      .action(async (opts: CompanyCommandOptions) => {
+        try {
+          const ctx = resolveCommandContext(opts);
+          const companyId = await resolveCurrentCompanyId(ctx);
+          const row = await ctx.api.get<Company>(apiPath`/api/companies/${companyId}`);
+          printOutput(row, { json: ctx.json });
+        } catch (err) {
+          handleCommandError(err);
+        }
+      }),
+    { includeCompany: true },
+  );
+
+  addCommonClientOptions(
+    company
+      .command("stats")
+      .description("Get company stats")
+      .action(async (opts: CompanyCommandOptions) => {
+        try {
+          const ctx = resolveCommandContext(opts);
+          printOutput(await ctx.api.get("/api/companies/stats"), { json: ctx.json });
+        } catch (err) {
+          handleCommandError(err);
+        }
+      }),
+  );
+
+  addCommonClientOptions(
+    company
+      .command("create")
+      .description("Create a company")
+      .requiredOption("--payload-json <json>", "CreateCompany JSON payload")
+      .action(async (opts: CompanyJsonOptions) => {
+        try {
+          const ctx = resolveCommandContext(opts);
+          printOutput(await createCompanyForContext(ctx, parseJson(opts.payloadJson ?? "{}")), { json: ctx.json });
+        } catch (err) {
+          handleCommandError(err);
+        }
+      }),
+  );
+
+  addCommonClientOptions(
+    company
+      .command("update")
+      .description("Update a company")
+      .argument("<companyId>", "Company ID")
+      .requiredOption("--payload-json <json>", "UpdateCompany JSON payload")
+      .action(async (companyId: string, opts: CompanyJsonOptions) => {
+        try {
+          const ctx = resolveCommandContext(opts);
+          printOutput(await ctx.api.patch(apiPath`/api/companies/${companyId}`, parseJson(opts.payloadJson ?? "{}")), { json: ctx.json });
+        } catch (err) {
+          handleCommandError(err);
+        }
+      }),
+  );
+
+  addCommonClientOptions(
+    company
+      .command("branding:update")
+      .description("Update company branding")
+      .argument("<companyId>", "Company ID")
+      .requiredOption("--payload-json <json>", "UpdateCompanyBranding JSON payload")
+      .action(async (companyId: string, opts: CompanyJsonOptions) => {
+        try {
+          const ctx = resolveCommandContext(opts);
+          printOutput(await ctx.api.patch(apiPath`/api/companies/${companyId}/branding`, parseJson(opts.payloadJson ?? "{}")), { json: ctx.json });
+        } catch (err) {
+          handleCommandError(err);
+        }
+      }),
+  );
+
+  addCommonClientOptions(
+    company
+      .command("archive")
+      .description("Archive a company")
+      .argument("<companyId>", "Company ID")
+      .action(async (companyId: string, opts: CompanyCommandOptions) => {
+        try {
+          const ctx = resolveCommandContext(opts);
+          printOutput(await ctx.api.post(apiPath`/api/companies/${companyId}/archive`, {}), { json: ctx.json });
+        } catch (err) {
+          handleCommandError(err);
+        }
+      }),
+  );
+
+  addCompanyJsonPost(company, "export:preview", "Preview a portable company export", "exports/preview");
+  addCompanyJsonPost(company, "export:api", "Export a company through the raw API route", "exports");
+  addCompanyJsonPost(company, "import:preview", "Preview a safe company import through the raw API route", "imports/preview");
+  addCompanyJsonPost(company, "import:apply", "Apply a safe company import through the raw API route", "imports/apply");
+
+  addCommonClientOptions(
+    company
       .command("export")
       .description("Export a company into portable manifest + markdown files")
       .argument("<companyId>", "Company ID")
@@ -916,15 +375,6 @@ export function registerCompanyCommands(program: Command): void {
           const exported = await ctx.api.post<CompanyPortabilityExportResult>(
             `/api/companies/${companyId}/export`,
             { include },
-            apiPath`/api/companies/${companyId}/export`,
-            {
-              include,
-              skills: parseCsvValues(opts.skills),
-              projects: parseCsvValues(opts.projects),
-              issues: parseCsvValues(opts.issues),
-              projectIssues: parseCsvValues(opts.projectIssues),
-              expandReferencedSkills: Boolean(opts.expandReferencedSkills),
-            },
           );
           if (!exported) {
             throw new Error("Export request returned no data");
@@ -1036,89 +486,6 @@ export function registerCompanyCommands(program: Command): void {
 
           const imported = await ctx.api.post<CompanyPortabilityImportResult>("/api/companies/import", payload);
           printOutput(imported, { json: ctx.json });
-          if (!ctx.json) {
-            printCompanyImportView(
-              "Import Preview",
-              renderCompanyImportPreview(preview, {
-                sourceLabel,
-                targetLabel: formatTargetLabel(targetPayload, preview),
-                infoMessages: adapterMessages,
-              }),
-              { interactive: interactiveView },
-            );
-          }
-
-          const confirmationMode = resolveCompanyImportApplyConfirmationMode({
-            yes: opts.yes,
-            interactive: interactiveView,
-            json: ctx.json,
-          });
-          if (confirmationMode === "prompt") {
-            const confirmed = await p.confirm({
-              message: "Apply this import? (y/N)",
-              initialValue: false,
-            });
-            if (p.isCancel(confirmed) || !confirmed) {
-              p.log.warn("Import cancelled.");
-              return;
-            }
-          }
-
-          const importApiPath = resolveCompanyImportApiPath({
-            dryRun: false,
-            targetMode: targetPayload.mode,
-            companyId: targetPayload.mode === "existing_company" ? targetPayload.companyId : null,
-          });
-          const imported = await ctx.api.post<CompanyPortabilityImportResult>(importApiPath, {
-            ...previewPayload,
-            adapterOverrides,
-          });
-          if (!imported) {
-            throw new Error("Import request returned no data.");
-          }
-          if (tc) {
-            const isPrivate = sourcePayload.type !== "github";
-            const sourceRef = sourcePayload.type === "github" ? sourcePayload.url : from;
-            trackCompanyImported(tc, { sourceType: sourcePayload.type, sourceRef, isPrivate });
-          }
-          let companyUrl: string | undefined;
-          if (!ctx.json) {
-            try {
-              const importedCompany = await ctx.api.get<Company>(apiPath`/api/companies/${imported.company.id}`);
-              const issuePrefix = importedCompany?.issuePrefix?.trim();
-              if (issuePrefix) {
-                companyUrl = buildCompanyDashboardUrl(ctx.api.apiBase, issuePrefix);
-              }
-            } catch {
-              companyUrl = undefined;
-            }
-          }
-          if (ctx.json) {
-            printOutput(imported, { json: true });
-          } else {
-            printCompanyImportView(
-              "Import Result",
-              renderCompanyImportResult(imported, {
-                targetLabel,
-                companyUrl,
-                infoMessages: adapterMessages,
-              }),
-              { interactive: interactiveView },
-            );
-            if (interactiveView && companyUrl) {
-              const openImportedCompany = await p.confirm({
-                message: "Open the imported company in your browser?",
-                initialValue: true,
-              });
-              if (!p.isCancel(openImportedCompany) && openImportedCompany) {
-                if (await openUrl(companyUrl)) {
-                  p.log.info(`Opened ${companyUrl}`);
-                } else {
-                  p.log.warn(`Could not open your browser automatically. Open this URL manually:\n${companyUrl}`);
-                }
-              }
-            }
-          }
         } catch (err) {
           handleCommandError(err);
         }

@@ -56,10 +56,6 @@ export function resolveCommandContext(
     options.apiKey?.trim() ||
     process.env.PAPERCLIP_API_KEY?.trim() ||
     readKeyFromProfileEnv(profile);
-  const resolvedApiKey = resolveApiKey(options, profile);
-  const explicitApiKey = resolvedApiKey.value;
-  const storedBoardCredential = explicitApiKey ? null : getStoredBoardCredential(apiBase);
-  const apiKey = explicitApiKey || storedBoardCredential?.token;
 
   const companyId =
     options.companyId?.trim() ||
@@ -73,32 +69,6 @@ export function resolveCommandContext(
   }
 
   const api = new CiutatisApiClient({ apiBase, apiKey });
-  // Agent-authenticated mutations (checkout, release, interactions, PATCH of an
-  // in-progress issue) require the X-Paperclip-Run-Id header (the server returns
-  // "401 Agent run id required" without it). Source it from --run-id, else the
-  // PAPERCLIP_RUN_ID env the adapter/embodiment context already exports.
-  const runId = options.runId?.trim() || process.env.PAPERCLIP_RUN_ID?.trim() || undefined;
-
-  const api = new PaperclipApiClient({
-    apiBase,
-    apiKey,
-    runId,
-      ? undefined
-      : async ({ error }) => {
-          const requestedAccess = error.message.includes("Instance admin required")
-            ? "instance_admin_required"
-            : "board";
-            return null;
-          }
-          const login = await loginBoardCli({
-            apiBase,
-            requestedAccess,
-            requestedCompanyId: companyId ?? null,
-            command: buildCliCommandLabel(),
-          });
-          return login.token;
-        },
-  });
   return {
     api,
     companyId,

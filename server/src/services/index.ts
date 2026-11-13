@@ -1,9 +1,5 @@
 export { companyService } from "./institutionService.js";
-export { companyService } from "./companies.js";
-export { companyArtifactsService } from "./company-artifacts.js";
 export { companySearchService } from "./company-search.js";
-// REMOVED: export { feedbackService } from "./feedback.js";
-// REMOVED: export { companySkillService } from "./company-skills.js";
 // Stub exports for upstream compatibility
 export { companySkillService } from "./company-skills.js";
 export { agentService, deduplicateAgentName } from "./agents.js";
@@ -74,7 +70,6 @@ export type {
 export { approvalService } from "./approvals.js";
 export { budgetService } from "./budgets.js";
 export { secretService } from "./secrets.js";
-// REMOVED: export { routineService } from "./routines.js";
 export { costService } from "./costs.js";
 export { financeService } from "./finance.js";
 export { heartbeatService, resolveHeartbeatSchedulingSuppression } from "./heartbeat.js";
@@ -88,24 +83,8 @@ export { sidebarBadgeService } from "./sidebar-badges.js";
 export { sidebarPreferenceService } from "./sidebar-preferences.js";
 export { accessService } from "./access.js";
 // Stub exports for upstream compatibility - these services are upstream-only
+export { boardAuthService } from "./board-auth.js";
 export { instanceSettingsService } from "./instance-settings.js";
-// REMOVED: export { companyPortabilityService } from "./company-portability.js";
-export { resourceMembershipService, type ResourceMembershipPolicyHook } from "./resource-memberships.js";
-export {
-  backfillPrincipalAccessCompatibility,
-  ensureHumanRoleDefaultGrants,
-  insertMissingPrincipalGrants,
-  type PrincipalAccessCompatibilityBackfillStats,
-} from "./principal-access-compatibility.js";
-export { authorizationService } from "./authorization.js";
-export type {
-  AuthorizationAction,
-  AuthorizationActor,
-  AuthorizationDecision,
-  AuthorizationResource,
-} from "./authorization.js";
-export { bootstrapExecutionPolicyFromEnv } from "./execution-policy-bootstrap.js";
-export { cloudUpstreamService, reconcileCloudUpstreamRunsOnStartup } from "./cloud-upstreams.js";
 export { companyPortabilityService } from "./company-portability.js";
 export { teamsCatalogService } from "./teams-catalog.js";
 export { environmentService } from "./environments.js";
@@ -141,6 +120,5 @@ export {
 export { reconcilePersistedRuntimeServicesOnStartup, restartDesiredRuntimeServicesOnStartup } from "./workspace-runtime.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
 export { institutionService } from "./institutionService.js";
-// REMOVED: export { issueService as requestService } from "./requestService.js";
 export { issueService as requestService } from "./requestService.js";
 export { publicPortalService } from "./public-portal.js";
