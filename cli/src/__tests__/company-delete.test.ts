@@ -16,6 +16,10 @@ function makeCompany(overrides: Partial<Company>): Company {
     spentMonthlyCents: 0,
     attachmentMaxBytes: 10 * 1024 * 1024,
     requireBoardApprovalForNewAgents: false,
+    feedbackDataSharingEnabled: false,
+    feedbackDataSharingConsentAt: null,
+    feedbackDataSharingConsentByUserId: null,
+    feedbackDataSharingTermsVersion: null,
     brandColor: null,
     logoAssetId: null,
     logoUrl: null,
@@ -35,7 +39,7 @@ describe("resolveCompanyForDeletion", () => {
     }),
     makeCompany({
       id: "22222222-2222-2222-2222-222222222222",
-      name: "Ciutatis",
+      name: "Paperclip",
       issuePrefix: "PAP",
     }),
   ];

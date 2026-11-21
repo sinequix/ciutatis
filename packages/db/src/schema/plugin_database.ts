@@ -6,10 +6,11 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-// Types defined locally - removed from shared as part of ciutatis fork
-type PluginDatabaseNamespaceMode = "schema" | "database";
-type PluginDatabaseNamespaceStatus = "active" | "paused" | "deprecated";
-type PluginDatabaseMigrationStatus = "pending" | "applying" | "applied" | "failed";
+import type {
+  PluginDatabaseMigrationStatus,
+  PluginDatabaseNamespaceMode,
+  PluginDatabaseNamespaceStatus,
+} from "@paperclipai/shared";
 import { plugins } from "./plugins.js";
 
 /**

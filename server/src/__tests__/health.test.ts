@@ -1,11 +1,12 @@
-import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import express from "express";
 import request from "supertest";
+import type { Db } from "@paperclipai/db";
 import { healthRoutes } from "../routes/health.js";
+import * as devServerStatus from "../dev-server-status.js";
 import { serverVersion } from "../version.js";
 
 const mockReadPersistedDevServerStatus = vi.hoisted(() => vi.fn());
@@ -59,13 +60,18 @@ function createApp(
 }
 
 describe("GET /health", () => {
-  const app = express();
-  app.use("/health", healthRoutes());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadPersistedDevServerStatus.mockReturnValue(undefined);
+  });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
   it("returns 200 with status ok", async () => {
+    const app = createApp();
     const res = await request(app).get("/health");
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok", version: serverVersion });
     expect(res.body).toEqual({ status: "ok", version: serverVersion, serverInfo: testServerInfo });
   }, 15_000);
 

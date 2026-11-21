@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import type { CiutatisConfig } from "../config/schema.js";
+import type { PaperclipConfig } from "../config/schema.js";
 import { addAllowedHostname } from "../commands/allowed-hostname.js";
 
 function createTempConfigPath() {
@@ -11,7 +11,7 @@ function createTempConfigPath() {
 }
 
 function writeBaseConfig(configPath: string) {
-  const base: CiutatisConfig = {
+  const base: PaperclipConfig = {
     $meta: {
       version: 1,
       updatedAt: new Date("2026-01-01T00:00:00.000Z").toISOString(),
@@ -44,6 +44,9 @@ function writeBaseConfig(configPath: string) {
       baseUrlMode: "auto",
       disableSignUp: false,
     },
+    telemetry: {
+      enabled: true,
+    },
     storage: {
       provider: "local_disk",
       localDisk: { baseDir: "/tmp/paperclip-storage" },
@@ -71,7 +74,7 @@ describe("allowed-hostname command", () => {
     await addAllowedHostname("https://Dotta-MacBook-Pro:3100", { config: configPath });
     await addAllowedHostname("dotta-macbook-pro", { config: configPath });
 
-    const raw = JSON.parse(fs.readFileSync(configPath, "utf-8")) as CiutatisConfig;
+    const raw = JSON.parse(fs.readFileSync(configPath, "utf-8")) as PaperclipConfig;
     expect(raw.server.allowedHostnames).toEqual(["dotta-macbook-pro"]);
   });
 });

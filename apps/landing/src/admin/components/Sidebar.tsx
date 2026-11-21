@@ -10,11 +10,6 @@ import {
   Boxes,
   SquarePen,
   Network,
-  Boxes,
-  Repeat,
-  Layers,
-  GitBranch,
-  Package,
   Settings,
   FolderOpen,
   PanelLeftClose,
@@ -30,9 +25,6 @@ import { SidebarSection } from "./SidebarSection";
 import { SidebarNavItem } from "./SidebarNavItem";
 import { SidebarAgents } from "./SidebarAgents";
 import { useDialog } from "../context/DialogContext";
-import { SidebarProjects } from "./SidebarProjects";
-import { SidebarStarredProjects } from "./SidebarStarredProjects";
-import { useDialogActions } from "../context/DialogContext";
 import { useCompany } from "../context/CompanyContext";
 import { useSidebar } from "../context/SidebarContext";
 import { attentionApi } from "../api/attention";
@@ -46,16 +38,9 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
 import { PluginSlotOutlet } from "@/plugins/slots";
+
 export function Sidebar() {
   const { openNewIssue } = useDialog();
-import { PluginLauncherOutlet } from "@/plugins/launchers";
-import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
-
-  const { openNewIssue } = useDialogActions();
-  // Every labeled section is collapsible (session-scoped, default open) —
-  // one policy across static nav groups and the data-driven sections.
-  const [workOpen, setWorkOpen] = useState(true);
-  const [companyOpen, setCompanyOpen] = useState(true);
   const { selectedCompanyId, selectedCompany } = useCompany();
   const { isMobile, collapsed, collapseLocked, peeking, toggleCollapsed, setCollapsed } = useSidebar();
   const rail = collapsed && !peeking;
@@ -63,15 +48,6 @@ import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
   const { data: liveRuns } = useQuery({
     queryKey: queryKeys.liveRuns(selectedCompanyId!),
     queryFn: () => heartbeatsApi.liveRunsForCompany(selectedCompanyId!),
-  const { data: experimentalSettings } = useQuery({
-    queryKey: queryKeys.instance.experimentalSettings,
-    queryFn: () => instanceSettingsApi.getExperimental(),
-  });
-  const liveRunsQueryKey = queryKeys.liveRuns(selectedCompanyId!);
-  const sharedLiveRuns = useSharedPollingQuery({
-    companyId: selectedCompanyId,
-    resourceKey: "live-runs",
-    queryKey: liveRunsQueryKey,
     enabled: !!selectedCompanyId,
     refetchInterval: 10_000,
     leaderOnly: true,
@@ -90,31 +66,6 @@ import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
     queryFn: () => instanceSettingsApi.getExperimental(),
   });
   const isolatedWorkspacesEnabled = experimentalSettings?.enableIsolatedWorkspaces === true;
-  const showWorkspacesLink = experimentalSettings?.enableIsolatedWorkspaces === true;
-  const showPipelines = experimentalSettings?.enablePipelines === true;
-  const goalsLinkPending = experimentalSettings === undefined;
-  const showGoalsLink = experimentalSettings?.enableGoalsSidebarLink === true;
-  // Decisions (attention home) is an experimental surface (PAP-13481): the nav
-  // item is hidden entirely until the flag is enabled (same no-flash pattern as
-  // showWorkspacesLink — it defaults hidden, so no placeholder is needed).
-  const showDecisions = experimentalSettings?.enableDecisions === true;
-  const { data: attentionFeed } = useQuery({
-    queryKey: queryKeys.attention(selectedCompanyId!),
-    queryFn: () => attentionApi.list(selectedCompanyId!),
-    enabled: !!selectedCompanyId && showDecisions,
-    refetchInterval: 60_000,
-  const attentionCount = attentionBadgeCount(attentionFeed);
-  const showCases = experimentalSettings?.enableCases === true;
-  // Streamlined left navigation (top-level Projects link + starred children) is
-  // now the standard product sidebar (PAP-12472). The former experimental
-  // opt-out was retired; classic per-project collapsible mode is no longer
-  // user-selectable. Kept as a constant so the classic branch below stays as a
-  // documented reference until it is fully removed. Routes are unaffected.
-  const streamlined = true;
-  // Conference Room Chat flag (PAP-136/PAP-137): the Conference Room nav item
-  // is a new surface, hidden entirely while the flag is off (same no-flash
-  // pattern as showWorkspacesLink above).
-  const conferenceRoomChatEnabled = experimentalSettings?.enableConferenceRoomChat === true;
 
   const pluginContext = {
     companyId: selectedCompanyId,
@@ -144,60 +95,6 @@ import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
             <Search className="h-4 w-4" />
           </Link>
         </Button>
-        <SidebarCompanyMenu />
-        {/* In the collapsed rail the search/toggle controls don't fit beside the
-            logo — keeping them would overflow the 64px rail and squeeze the logo
-            out of alignment with the icon column below it (PAP-10676). They return
-            as soon as the panel is expanded (pinned) or peeking. Expansion in the
-            rail is still reachable via hover-peek + Pin and Cmd/Ctrl+B. */}
-        {!rail ? (
-          <>
-            <Button
-              asChild
-              variant="ghost"
-              size="icon-sm"
-              className="text-muted-foreground shrink-0"
-              aria-label="Open search"
-              title="Open search"
-            >
-              <NavLink to="/search">
-                <Search className="h-4 w-4" />
-              </NavLink>
-            </Button>
-            {/* Desktop-only collapse/expand affordance. While peeking (hover flyout
-                over the collapsed rail) it becomes a Pin that promotes the peek to a
-                pinned-expanded sidebar; otherwise it toggles the pinned rail. Mobile
-                uses the off-canvas drawer, so this control is hidden there. It is
-                also hidden while a secondary sidebar forces the rail (collapseLocked):
-                the user cannot expand the primary while a secondary sidebar is shown. */}
-            {!isMobile && !collapseLocked ? (
-              peeking ? (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="text-muted-foreground shrink-0"
-                  aria-label="Keep sidebar expanded"
-                  title="Keep sidebar expanded"
-                  onClick={() => setCollapsed(false)}
-                >
-                  <Pin className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  className="text-muted-foreground shrink-0"
-                  aria-expanded={!collapsed}
-                  aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                  title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                  onClick={() => toggleCollapsed()}
-                >
-                  {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-                </Button>
-              )
-            ) : null}
-          </>
-        ) : null}
       </div>
 
       <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide flex flex-col gap-4 pointer-coarse:gap-3 px-3 py-2">
@@ -210,28 +107,6 @@ import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
             <SquarePen className="h-4 w-4 shrink-0" />
             <span className="truncate">New Request</span>
           </button>
-          {/* New Task button aligned with nav items */}
-          {(() => {
-            const newTaskButton = (
-              <button
-                onClick={() => openNewIssue()}
-                data-slot="icon-button"
-                aria-label={rail ? "New Task" : undefined}
-                className="flex items-center gap-2.5 mx-2 rounded-lg px-2 py-1.5 pointer-coarse:py-1 text-(length:--text-compact) font-medium text-foreground/80 hover:bg-accent/50 hover:text-foreground transition-colors"
-              >
-                <SquarePen className="h-4 w-4 shrink-0" />
-                <span className={rail ? SIDEBAR_RAIL_HIDDEN_LABEL : "truncate"}>New Task</span>
-              </button>
-            );
-            return rail ? (
-              <Tooltip>
-                <TooltipTrigger asChild>{newTaskButton}</TooltipTrigger>
-                <TooltipContent side="right">New Task</TooltipContent>
-              </Tooltip>
-            ) : (
-              newTaskButton
-            );
-          })()}
           <SidebarNavItem to="/dashboard" label="Dashboard" icon={LayoutDashboard} liveCount={liveRunCount} />
           <SidebarNavItem
             to="/inbox"
@@ -256,28 +131,11 @@ import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
           ) : null}
         </div>
 
-        <SidebarSection label="Work" collapsible={{ open: workOpen, onOpenChange: setWorkOpen }}>
-          <SidebarNavItem to="/issues" label="Tasks" icon={CircleDot} />
-          {showCases ? (
-            <SidebarNavItem to="/cases" label="Cases" icon={Layers} textBadge="beta" />
-          ) : null}
-          <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
-          {showPipelines ? (
-            <SidebarNavItem to="/pipelines" label="Pipelines" icon={GitBranch} />
-          ) : null}
-          {showGoalsLink ? (
-            <SidebarNavItem to="/goals" label="Goals" icon={Target} />
-          ) : goalsLinkPending ? (
-            <div
-              data-testid="sidebar-goals-placeholder"
-              className="h-8 pointer-coarse:h-7"
-              aria-hidden="true"
-            />
-          ) : null}
-          <SidebarNavItem to="/artifacts" label="Artifacts" icon={Package} />
-          <SidebarNavItem to="/skills" label="Skills" icon={Boxes} />
-          {showWorkspacesLink ? (
-            <SidebarNavItem to="/workspaces" label="Workspaces" icon={GitBranch} />
+        <SidebarSection label="Work">
+          <SidebarNavItem to="/requests" label="Requests" icon={CircleDot} />
+          <SidebarNavItem to="/objectives" label="Objectives" icon={Target} />
+          {isolatedWorkspacesEnabled ? (
+            <SidebarNavItem to="/workspaces" label="Workspaces" icon={Boxes} />
           ) : null}
           {streamlined ? (
             <>
@@ -292,14 +150,6 @@ import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
             itemClassName="text-(length:--text-compact) font-medium"
             missingBehavior="placeholder"
           />
-        </div>
-
-        <SidebarSection label="Work">
-          <SidebarNavItem to="/requests" label="Requests" icon={CircleDot} />
-          <SidebarNavItem to="/objectives" label="Objectives" icon={Target} />
-          {isolatedWorkspacesEnabled ? (
-            <SidebarNavItem to="/workspaces" label="Workspaces" icon={Boxes} />
-          ) : null}
           <PluginLauncherOutlet
             placementZones={["sidebar"]}
             context={pluginContext}
@@ -315,8 +165,6 @@ import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
 
         <SidebarSection label="Institution">
           <SidebarNavItem to="/org" label="Org" icon={Network} />
-        <SidebarSection label="Company" collapsible={{ open: companyOpen, onOpenChange: setCompanyOpen }}>
-          <SidebarNavItem to="/timeline" label="Timeline" icon={GanttChartSquare} />
           <SidebarNavItem to="/costs" label="Costs" icon={DollarSign} />
           <SidebarNavItem to="/activity" label="Activity" icon={History} />
           <SidebarNavItem to="/institution/settings" label="Settings" icon={Settings} />

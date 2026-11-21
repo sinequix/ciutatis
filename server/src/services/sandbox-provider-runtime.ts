@@ -243,7 +243,7 @@ export function listSandboxProviders(): SandboxProvider[] {
 export async function validateSandboxProviderConfig(
   config: SandboxEnvironmentConfig,
 ): Promise<SandboxProviderValidationResult> {
-  return await requireSandboxProvider(config.provider!).validateConfig(config);
+  return await requireSandboxProvider(config.provider).validateConfig(config);
 }
 
 export function sandboxConfigFromLeaseMetadata(
@@ -284,7 +284,7 @@ export function findReusableSandboxProviderLeaseId(input: {
   config: SandboxEnvironmentConfig;
   leases: Array<{ providerLeaseId: string | null; metadata: Record<string, unknown> | null }>;
 }): string | null {
-  const provider = getSandboxProvider(input.config.provider!);
+  const provider = getSandboxProvider(input.config.provider);
   if (!provider) {
     for (const lease of input.leases) {
       const metadata = lease.metadata ?? {};
@@ -325,7 +325,7 @@ function metadataMatchesPluginSandboxConfig(
 export async function probeSandboxProvider(
   config: SandboxEnvironmentConfig,
 ): Promise<EnvironmentProbeResult> {
-  return await requireSandboxProvider(config.provider!).probe(config);
+  return await requireSandboxProvider(config.provider).probe(config);
 }
 
 export async function acquireSandboxProviderLease(input: {
@@ -337,8 +337,6 @@ export async function acquireSandboxProviderLease(input: {
   executionWorkspaceId?: string | null;
   reusableProviderLeaseId?: string | null;
 }): Promise<SandboxLeaseHandle> {
-  const provider = requireSandboxProvider(input.config.provider!);
-  if (input.config.reuseLease && input.reusableProviderLeaseId) {
   const provider = requireSandboxProvider(input.config.provider);
   if (provider.supportsReusableLeases && input.config.reuseLease && input.reusableProviderLeaseId) {
     const resumedLease = await provider.resumeLease({
@@ -364,7 +362,7 @@ export async function resumeSandboxProviderLease(input: {
   config: SandboxEnvironmentConfig;
   providerLeaseId: string;
 }): Promise<SandboxLeaseHandle | null> {
-  return await requireSandboxProvider(input.config.provider!).resumeLease(input);
+  return await requireSandboxProvider(input.config.provider).resumeLease(input);
 }
 
 export async function releaseSandboxProviderLease(input: {
@@ -372,12 +370,12 @@ export async function releaseSandboxProviderLease(input: {
   providerLeaseId: string | null;
   status: Extract<EnvironmentLeaseStatus, "released" | "expired" | "failed">;
 }): Promise<void> {
-  await requireSandboxProvider(input.config.provider!).releaseLease(input);
+  await requireSandboxProvider(input.config.provider).releaseLease(input);
 }
 
 export async function destroySandboxProviderLease(input: {
   config: SandboxEnvironmentConfig;
   providerLeaseId: string | null;
 }): Promise<void> {
-  await requireSandboxProvider(input.config.provider!).destroyLease(input);
+  await requireSandboxProvider(input.config.provider).destroyLease(input);
 }

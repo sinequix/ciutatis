@@ -306,7 +306,7 @@ export function environmentRunOrchestrator(
       companyId: input.companyId,
       adapterType: input.adapterType,
       environment,
-      leaseMetadata: leaseRecord.lease.metadata ?? null,
+      leaseMetadata: leaseRecord.lease.metadata,
     });
 
     return {

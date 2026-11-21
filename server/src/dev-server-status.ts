@@ -1,20 +1,21 @@
-import { readFileSync } from "node:fs";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-export interface DevServerStatus {
+const MAX_PERSISTED_DEV_SERVER_STATUS_BYTES = 64 * 1024;
+
+export type PersistedDevServerStatus = {
   dirty: boolean;
   lastChangedAt: string | null;
   changedPathCount: number;
   changedPathsSample: string[];
   pendingMigrations: string[];
   lastRestartAt: string | null;
-}
+};
 
-export interface DevServerHealthStatus {
+export type DevServerHealthStatus = {
   enabled: true;
   restartRequired: boolean;
-  reason: "backend_changes" | "pending_migrations" | null;
+  reason: "backend_changes" | "pending_migrations" | "backend_changes_and_pending_migrations" | null;
   lastChangedAt: string | null;
   changedPathCount: number;
   changedPathsSample: string[];
@@ -58,36 +59,43 @@ function normalizeStringArray(value: unknown): string[] {
     .filter((entry) => entry.length > 0);
 }
 
-export function getDevServerStatus(): DevServerStatus | null {
-  return readPersistedDevServerStatus();
+function normalizeTimestamp(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
-export function isDevServerIdle(_status: DevServerStatus | null): boolean {
-  return false;
-}
+export function readPersistedDevServerStatus(
+  env: NodeJS.ProcessEnv = process.env,
+): PersistedDevServerStatus | null {
+  const filePath = env.PAPERCLIP_DEV_SERVER_STATUS_FILE?.trim();
+  if (!filePath || !existsSync(filePath)) return null;
 
-export function autoRestartDevServerWhenIdle(_thresholdMinutes: number): Promise<void> {
-  return Promise.resolve();
-}
-
-function asStringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === "string")
-    : [];
-}
-
-export function readPersistedDevServerStatus(): DevServerStatus | null {
-  const filePath = process.env.PAPERCLIP_DEV_SERVER_STATUS_FILE?.trim();
-  if (!filePath) return null;
   try {
-    const parsed = JSON.parse(readFileSync(filePath, "utf8")) as Record<string, unknown>;
+    if (statSync(filePath).size > MAX_PERSISTED_DEV_SERVER_STATUS_BYTES) {
+      return null;
+    }
+    const raw = JSON.parse(readFileSync(filePath, "utf8")) as Record<string, unknown>;
+    const changedPathsSample = normalizeStringArray(raw.changedPathsSample).slice(0, 5);
+    const pendingMigrations = normalizeStringArray(raw.pendingMigrations);
+    const changedPathCountRaw = raw.changedPathCount;
+    const changedPathCount =
+      typeof changedPathCountRaw === "number" && Number.isFinite(changedPathCountRaw)
+        ? Math.max(0, Math.trunc(changedPathCountRaw))
+        : changedPathsSample.length;
+    const dirtyRaw = raw.dirty;
+    const dirty =
+      typeof dirtyRaw === "boolean"
+        ? dirtyRaw
+        : changedPathCount > 0 || pendingMigrations.length > 0;
+
     return {
-      dirty: Boolean(parsed.dirty),
-      lastChangedAt: typeof parsed.lastChangedAt === "string" ? parsed.lastChangedAt : null,
-      changedPathCount: Number.isFinite(Number(parsed.changedPathCount)) ? Number(parsed.changedPathCount) : 0,
-      changedPathsSample: asStringArray(parsed.changedPathsSample),
-      pendingMigrations: asStringArray(parsed.pendingMigrations),
-      lastRestartAt: typeof parsed.lastRestartAt === "string" ? parsed.lastRestartAt : null,
+      dirty,
+      lastChangedAt: normalizeTimestamp(raw.lastChangedAt),
+      changedPathCount,
+      changedPathsSample,
+      pendingMigrations,
+      lastRestartAt: normalizeTimestamp(raw.lastRestartAt),
     };
   } catch {
     return null;
@@ -95,29 +103,32 @@ export function readPersistedDevServerStatus(): DevServerStatus | null {
 }
 
 export function toDevServerHealthStatus(
-  status: DevServerStatus,
-  opts: { autoRestartEnabled?: boolean; activeRunCount?: number } = {},
+  persisted: PersistedDevServerStatus,
+  opts: { autoRestartEnabled: boolean; activeRunCount: number },
 ): DevServerHealthStatus {
-  const activeRunCount = Math.max(0, Math.trunc(opts.activeRunCount ?? 0));
-  const pendingMigrations = status.pendingMigrations;
-  const restartRequired = Boolean(status.dirty || pendingMigrations.length > 0);
-  const reason = pendingMigrations.length > 0
-    ? "pending_migrations"
-    : status.dirty
-      ? "backend_changes"
-      : null;
+  const hasPathChanges = persisted.changedPathCount > 0;
+  const hasPendingMigrations = persisted.pendingMigrations.length > 0;
+  const reason =
+    hasPathChanges && hasPendingMigrations
+      ? "backend_changes_and_pending_migrations"
+      : hasPendingMigrations
+        ? "pending_migrations"
+        : hasPathChanges
+          ? "backend_changes"
+          : null;
+  const restartRequired = persisted.dirty || reason !== null;
 
   return {
     enabled: true,
     restartRequired,
     reason,
-    lastChangedAt: status.lastChangedAt,
-    changedPathCount: status.changedPathCount,
-    changedPathsSample: status.changedPathsSample,
-    pendingMigrations,
-    autoRestartEnabled: Boolean(opts.autoRestartEnabled),
-    activeRunCount,
-    waitingForIdle: restartRequired && Boolean(opts.autoRestartEnabled) && activeRunCount > 0,
-    lastRestartAt: status.lastRestartAt,
+    lastChangedAt: persisted.lastChangedAt,
+    changedPathCount: persisted.changedPathCount,
+    changedPathsSample: persisted.changedPathsSample,
+    pendingMigrations: persisted.pendingMigrations,
+    autoRestartEnabled: opts.autoRestartEnabled,
+    activeRunCount: opts.activeRunCount,
+    waitingForIdle: restartRequired && opts.autoRestartEnabled && opts.activeRunCount > 0,
+    lastRestartAt: persisted.lastRestartAt,
   };
 }

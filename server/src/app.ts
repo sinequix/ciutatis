@@ -2,7 +2,6 @@ import express, { Router, type Request as ExpressRequest } from "express";
 import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
-import * as Sentry from "@sentry/node";
 import type { Db } from "@paperclipai/db";
 import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
 import type { InspectDatabaseBackupHealthOptions } from "./services/database-backup-health.js";
@@ -11,20 +10,22 @@ import { httpLogger, errorHandler } from "./middleware/index.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
+import { applyTrustProxy, parseTrustProxyEnv } from "./middleware/trust-proxy.js";
 import { healthRoutes } from "./routes/health.js";
 import { companyRoutes } from "./routes/companies.js";
-import { applyTrustProxy, parseTrustProxyEnv } from "./middleware/trust-proxy.js";
+import { companySkillRoutes } from "./routes/company-skills.js";
 import { builtInAgentRoutes } from "./routes/built-in-agents.js";
 import { teamsCatalogRoutes } from "./routes/teams-catalog.js";
 import { agentRoutes } from "./routes/agents.js";
 import { projectRoutes } from "./routes/projects.js";
 import { issueRoutes } from "./routes/issues.js";
 import { issueTreeControlRoutes } from "./routes/issue-tree-control.js";
-import { environmentRoutes } from "./routes/environments.js";
-import { executionWorkspaceRoutes } from "./routes/execution-workspaces.js";
 import { caseRoutes } from "./routes/cases.js";
 import { fileResourceRoutes } from "./routes/file-resources.js";
+import { routineRoutes } from "./routes/routines.js";
 import { pipelineRoutes } from "./routes/pipelines.js";
+import { environmentRoutes } from "./routes/environments.js";
+import { executionWorkspaceRoutes } from "./routes/execution-workspaces.js";
 import { goalRoutes } from "./routes/goals.js";
 import { boardChatRoutes } from "./routes/board-chat.js";
 import { approvalRoutes } from "./routes/approvals.js";
@@ -37,6 +38,7 @@ import { userProfileRoutes } from "./routes/user-profiles.js";
 import { sidebarBadgeRoutes } from "./routes/sidebar-badges.js";
 import { sidebarPreferenceRoutes } from "./routes/sidebar-preferences.js";
 import { resourceMembershipRoutes } from "./routes/resource-memberships.js";
+import { inboxDismissalRoutes } from "./routes/inbox-dismissals.js";
 import { instanceSettingsRoutes } from "./routes/instance-settings.js";
 import { openApiRoutes } from "./routes/openapi.js";
 import {
@@ -44,10 +46,11 @@ import {
   type InstanceDatabaseBackupService,
 } from "./routes/instance-database-backups.js";
 import { llmRoutes } from "./routes/llms.js";
+import { authRoutes } from "./routes/auth.js";
 import { assetRoutes } from "./routes/assets.js";
 import { accessRoutes } from "./routes/access.js";
-import { adapterRoutes } from "./routes/adapters.js";
 import { pluginRoutes } from "./routes/plugins.js";
+import { adapterRoutes } from "./routes/adapters.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { publicPortalRoutes } from "./routes/public-portal.js";
 import { readBrandedStaticIndexHtml } from "./static-index-html.js";
@@ -94,20 +97,6 @@ const VITE_DEV_STATIC_PATHS = new Set([
   "/sw.js",
 ]);
 
-export function isStaticUiAssetPath(pathname: string): boolean {
-  return pathname === "/assets" || pathname.startsWith("/assets/");
-}
-
-export function resolveStaticUiCacheControl(filePath: string, indexHtmlPath: string): string {
-  if (path.resolve(filePath) === path.resolve(indexHtmlPath)) {
-    return "no-cache";
-  }
-  if (filePath.split(path.sep).join("/").includes("/assets/")) {
-    return "public, max-age=31536000, immutable";
-  }
-  return "public, max-age=3600";
-}
-
 export function isDatabaseConnectionUnavailableError(err: unknown): boolean {
   const error = err as { code?: unknown; message?: unknown; cause?: unknown };
   if (error?.code === "ECONNREFUSED") return true;
@@ -149,9 +138,6 @@ export async function createApp(
   opts: {
     uiMode: UiMode;
     serverPort: number;
-    /** Enable the plugin dev-watcher (hot-reload). Was coupled to the former
-     * Vite UI dev middleware; now an independent flag. */
-    pluginDevWatch?: boolean;
     storageService: StorageService;
     feedbackExportService?: {
       flushPendingFeedbackTraces(input?: {
@@ -203,6 +189,10 @@ export async function createApp(
     deploymentMode: opts.deploymentMode,
     deploymentExposure: opts.deploymentExposure,
   });
+  const privateHostnameAllowSet = resolvePrivateHostnameAllowSet({
+    allowedHostnames: opts.allowedHostnames,
+    bindHost: opts.bindHost,
+  });
   app.use(
     privateHostnameGuard({
       enabled: privateHostnameGateEnabled,
@@ -216,33 +206,17 @@ export async function createApp(
       resolveSession: opts.resolveSession,
     }),
   );
+  app.use("/api/auth", authRoutes(db));
   if (opts.betterAuthHandler) {
     app.all("/api/auth/{*authPath}", opts.betterAuthHandler);
-  } else {
-    app.get("/api/auth/get-session", (req, res) => {
-      if (opts.deploymentMode !== "local_trusted") {
-        res.status(401).json(null);
-        return;
-      }
-      const userId = req.actor.userId ?? "local-board";
-      res.json({
-        session: { id: "local-trusted-session", userId },
-        user: {
-          id: userId,
-          email: null,
-          name: "Local Board",
-          isInstanceAdmin: true,
-        },
-      });
-    });
   }
   app.use(llmRoutes(db));
+  app.use("/api/public", publicPortalRoutes(db));
 
   const hostServicesDisposers = new Map<string, () => void>();
   const workerManager = opts.pluginWorkerManager ?? createPluginWorkerManager();
 
   // Mount API routes
-  app.use("/api/public", publicPortalRoutes(db));
   const api = Router();
   api.use(boardMutationGuard());
   api.use(
@@ -255,48 +229,31 @@ export async function createApp(
       databaseBackupHealth: opts.databaseBackupHealth,
     }),
   );
-  if (process.env.SENTRY_DEBUG_ROUTE === "1") {
-    api.get("/debug-sentry", async (_req, _res) => {
-      await Sentry.startSpan(
-        {
-          op: "test",
-          name: "Ciutatis admin Sentry verify",
-        },
-        async () => {
-          await new Promise((resolve) => setTimeout(resolve, 50));
-          throw new Error("Ciutatis admin Sentry test error");
-        },
-      );
-    });
-  }
-  api.use("/companies", companyRoutes(db));
-  api.use(agentRoutes(db, { pluginWorkerManager: workerManager }));
-  api.use(assetRoutes(db, opts.storageService));
-  api.use(projectRoutes(db));
-  api.use(issueRoutes(db, opts.storageService));
-  api.use(issueTreeControlRoutes(db));
-  api.use(environmentRoutes(db, { pluginWorkerManager: workerManager }));
-  api.use(executionWorkspaceRoutes(db));
   api.use(openApiRoutes());
   api.use("/companies", companyRoutes(db, opts.storageService));
   api.use(llmRoutes(db));
   api.use(companySkillRoutes(db));
   api.use(builtInAgentRoutes(db));
   api.use(teamsCatalogRoutes(db));
+  api.use(agentRoutes(db, { pluginWorkerManager: workerManager }));
+  api.use(assetRoutes(db, opts.storageService));
+  api.use(projectRoutes(db));
   api.use(issueRoutes(db, opts.storageService, {
     feedbackExportService: opts.feedbackExportService,
     pluginWorkerManager: workerManager,
   }));
   api.use(caseRoutes(db, opts.storageService));
+  api.use(issueTreeControlRoutes(db));
   api.use(fileResourceRoutes(db));
   api.use(routineRoutes(db, { pluginWorkerManager: workerManager }));
   api.use(pipelineRoutes(db));
+  api.use(environmentRoutes(db, { pluginWorkerManager: workerManager }));
   api.use(executionWorkspaceRoutes(db, { pluginWorkerManager: workerManager }));
   api.use(goalRoutes(db));
   api.use(boardChatRoutes(db, { deploymentMode: opts.deploymentMode }));
   api.use(approvalRoutes(db, { pluginWorkerManager: workerManager }));
   api.use(secretRoutes(db));
-  api.use(costRoutes(db));
+  api.use(costRoutes(db, { pluginWorkerManager: workerManager }));
   api.use(activityRoutes(db));
   api.use(dashboardRoutes(db));
   api.use(attentionRoutes(db));
@@ -306,7 +263,6 @@ export async function createApp(
   api.use(resourceMembershipRoutes(db));
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
-  api.use(adapterRoutes());
   if (opts.databaseBackupService) {
     api.use(instanceDatabaseBackupRoutes(opts.databaseBackupService));
   }
@@ -332,6 +288,7 @@ export async function createApp(
     jobStore,
   });
   const hostServiceCleanup = createPluginHostServiceCleanup(lifecycle, hostServicesDisposers);
+  let viteHtmlRenderer: ReturnType<typeof createCachedViteHtmlRenderer> | null = null;
   const loader = pluginLoader(
     db,
     {
@@ -379,6 +336,7 @@ export async function createApp(
       { workerManager },
     ),
   );
+  api.use(adapterRoutes());
   api.use(
     accessRoutes(db, {
       deploymentMode: opts.deploymentMode,
@@ -397,11 +355,10 @@ export async function createApp(
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   if (opts.uiMode === "static") {
-    // Optional static UI fallback (server/ui-dist). The primary UI is now the
-    // unified Next app (apps/landing); this serves a prebuilt static bundle only
-    // if one is dropped here, otherwise the server runs API-only.
+    // Try published location first (server/ui-dist/), then monorepo dev location (../../ui/dist)
     const candidates = [
       path.resolve(__dirname, "../ui-dist"),
+      path.resolve(__dirname, "../../ui/dist"),
     ];
     const uiDist = candidates.find((p) => fs.existsSync(path.join(p, "index.html")));
     if (uiDist) {
@@ -495,9 +452,6 @@ export async function createApp(
     app.use(vite.middlewares);
   }
 
-  // Sentry Express error handler must run after all routes/controllers and
-  // before any other error middleware.
-  Sentry.setupExpressErrorHandler(app);
   app.use(errorHandler);
 
   jobCoordinator.start();
@@ -537,12 +491,10 @@ export async function createApp(
   void toolDispatcher.initialize().catch((err) => {
     logger.error({ err }, "Failed to initialize plugin tool dispatcher");
   });
-  const devWatcher = opts.pluginDevWatch
-    ? createPluginDevWatcher(
-      lifecycle,
-      async (pluginId) => (await pluginRegistry.getById(pluginId))?.packagePath ?? null,
-    )
-    : null;
+  const devWatcher = createPluginDevWatcher(
+    lifecycle,
+    async (pluginId) => (await pluginRegistry.getById(pluginId))?.packagePath ?? null,
+  );
   // Auto-install the bundled kubernetes sandbox-provider plugin so the
   // "kubernetes" sandbox provider is registered for agent runs. The plugin is
   // excluded from the pnpm workspace and built standalone into the image (see
@@ -604,21 +556,22 @@ export async function createApp(
   void ensureBundledKubernetesPlugin()
     .then(() => loader.loadAll())
     .then((result) => {
-      if (!result) return;
-      for (const loaded of result.results) {
-        if (devWatcher && loaded.success && loaded.plugin.packagePath) {
-          devWatcher.watch(loaded.plugin.id, loaded.plugin.packagePath);
-        }
+    if (!result) return;
+    for (const loaded of result.results) {
+      if (devWatcher && loaded.success && loaded.plugin.packagePath) {
+        devWatcher.watch(loaded.plugin.id, loaded.plugin.packagePath);
       }
-    }).catch((err) => {
-      logger.error({ err }, "Failed to load ready plugins on startup");
-    });
+    }
+  }).catch((err) => {
+    logger.error({ err }, "Failed to load ready plugins on startup");
+  });
   let appServicesShutdown = false;
   const shutdownAppServices = () => {
     if (appServicesShutdown) return;
     appServicesShutdown = true;
     disableFeedbackExportFlushes();
     devWatcher?.close();
+    viteHtmlRenderer?.dispose();
     hostServiceCleanup.disposeAll();
     hostServiceCleanup.teardown();
   };

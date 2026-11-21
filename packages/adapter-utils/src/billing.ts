@@ -1,10 +1,12 @@
-function readEnv(env: NodeJS.ProcessEnv, key: string): string | null {
+type EnvMap = Record<string, string | undefined>;
+
+function readEnv(env: EnvMap, key: string): string | null {
   const value = env[key];
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
 export function inferOpenAiCompatibleBiller(
-  env: NodeJS.ProcessEnv,
+  env: EnvMap,
   fallback: string | null = "openai",
 ): string | null {
   const explicitOpenRouterKey = readEnv(env, "OPENROUTER_API_KEY");

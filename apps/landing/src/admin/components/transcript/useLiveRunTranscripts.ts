@@ -2,12 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { LiveEvent } from "@paperclipai/shared";
 import { heartbeatsApi, type LiveRunForIssue } from "../../api/heartbeats";
 import { buildTranscript, getUIAdapter, type RunLogChunk, type TranscriptEntry } from "../../adapters";
-import { ApiError } from "../../api/client";
-import { instanceSettingsApi } from "../../api/instanceSettings";
-import { heartbeatsApi } from "../../api/heartbeats";
-import { buildTranscript, getUIAdapter, onAdapterChange, type RunLogChunk, type TranscriptEntry } from "../../adapters";
-import { queryKeys } from "../../lib/queryKeys";
-import { buildSameOriginWebSocketUrl } from "../../lib/websocket-url";
 
 const LOG_POLL_INTERVAL_MS = 2000;
 const LOG_READ_LIMIT_BYTES = 256_000;
@@ -24,27 +18,6 @@ function readString(value: unknown): string | null {
 
 function isTerminalStatus(status: string): boolean {
   return status === "failed" || status === "timed_out" || status === "cancelled" || status === "interrupted" || status === "succeeded";
-}
-
-function runKnownLogBytes(run: RunTranscriptSource): number | null {
-  const bytes = run.status === "queued"
-    ? run.logBytes
-    : run.lastOutputBytes ?? run.logBytes;
-  return typeof bytes === "number" && Number.isFinite(bytes) && bytes > 0 ? bytes : null;
-}
-
-export function resolveInitialLogOffset(run: RunTranscriptSource, limitBytes: number): number {
-  const knownBytes = runKnownLogBytes(run);
-  if (knownBytes === null) return 0;
-  return Math.max(0, knownBytes - Math.max(0, limitBytes));
-}
-
-function readChunkSeq(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
-}
-
-function isStructuredStreamingTextDelta(chunk: string) {
-  return /"type"\s*:\s*"(?:acpx\.text_delta|text)"/.test(chunk);
 }
 
 function parsePersistedLogContent(
@@ -199,22 +172,6 @@ export function useLiveRunTranscripts({
       }
     }
   }, [runs]);
-    for (const runId of trimmedSeqFloorByRunRef.current.keys()) {
-      if (!knownRunIds.has(runId)) {
-        trimmedSeqFloorByRunRef.current.delete(runId);
-      }
-    }
-    for (const runId of missingTerminalLogRunIdsRef.current.keys()) {
-      if (!knownRunIds.has(runId)) {
-        missingTerminalLogRunIdsRef.current.delete(runId);
-      }
-    }
-    for (const runId of transcriptCacheRef.current.keys()) {
-      if (!knownRunIds.has(runId)) {
-        transcriptCacheRef.current.delete(runId);
-      }
-    }
-  }, [normalizedRuns]);
 
   useEffect(() => {
     if (runs.length === 0) return;

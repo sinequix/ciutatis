@@ -48,6 +48,18 @@ async function checkRateLimit(
   return { ok: true, retryAfterSec: 0 };
 }
 
+function isUploadedFile(value: unknown): value is File {
+  return typeof value === "object" && value !== null && value instanceof File;
+}
+
+function collaborateFailureStatus(status: number): 400 | 413 | 415 | 422 | 500 | 502 {
+  if (status === 401) return 502;
+  if (status === 400 || status === 413 || status === 415 || status === 422 || status === 500) {
+    return status;
+  }
+  return 502;
+}
+
 const ALLOWED_EXTENSIONS = ["pdf", "csv", "xlsx", "xls", "txt", "md", "json"];
 const ALLOWED_CONTENT_TYPES = [
   "application/pdf",
@@ -90,10 +102,11 @@ export function collaborateRoutes() {
       return c.json({ error: "Expected a multipart form upload." }, 400);
     }
 
-    const file = form.get("file");
-    if (!(file instanceof File)) {
+    const uploaded: unknown = form.get("file");
+    if (!isUploadedFile(uploaded)) {
       return c.json({ error: "Attach a document under the 'file' field." }, 400);
     }
+    const file = uploaded;
     if (file.size === 0) {
       return c.json({ error: "The uploaded file is empty." }, 400);
     }
@@ -138,7 +151,7 @@ export function collaborateRoutes() {
     if (!response.ok) {
       return c.json(
         { error: "The document parser couldn't process this file.", detail: text.slice(0, 500) },
-        response.status === 401 ? 502 : (response.status as 400 | 413 | 415 | 422 | 500),
+        collaborateFailureStatus(response.status),
       );
     }
 

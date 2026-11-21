@@ -1,4 +1,4 @@
-import { definePlugin, runWorker } from "@paperclipai/plugin-sdk";
+import { definePlugin, runWorker, type CiutatisPlugin } from "@paperclipai/plugin-sdk";
 
 const PLUGIN_NAME = "hello-world-example";
 const HEALTH_MESSAGE = "Hello World example plugin ready";
@@ -7,7 +7,7 @@ const HEALTH_MESSAGE = "Hello World example plugin ready";
  * Worker lifecycle hooks for the Hello World reference plugin.
  * This stays intentionally small so new authors can copy the shape quickly.
  */
-const plugin = definePlugin({
+const plugin: CiutatisPlugin = definePlugin({
   /**
    * Called when the host starts the plugin worker.
    */

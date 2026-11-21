@@ -33,7 +33,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import type { Db } from "@paperclipai/db";
 import type {
-  CiutatisPluginManifestV1,
+  PaperclipPluginManifestV1,
   PluginLauncherDeclaration,
   PluginRecord,
   PluginUiSlotDeclaration,
@@ -63,8 +63,8 @@ const STANDALONE_BUNDLED_PLUGIN_SDK_PACKAGE = "@paperclipai/plugin-sdk";
 // ---------------------------------------------------------------------------
 
 /**
- * Naming convention for npm-published Paperclip core plugins.
- * Packages matching this pattern are considered first-party Paperclip plugins.
+ * Naming convention for npm-published Paperclip plugins.
+ * Packages matching this pattern are considered Paperclip plugins.
  *
  * @see PLUGIN_SPEC.md §10 — Package Contract
  */
@@ -157,7 +157,7 @@ export interface DiscoveredPlugin {
   /** Source that found this package. */
   source: PluginSource;
   /** The parsed and validated manifest if available, null if discovery-only. */
-  manifest: CiutatisPluginManifestV1 | null;
+  manifest: PaperclipPluginManifestV1 | null;
 }
 
 /**
@@ -189,7 +189,6 @@ export interface PluginDiscoveryResult {
   sources: PluginSource[];
 }
 
-function getDeclaredPageRoutePaths(manifest: CiutatisPluginManifestV1): string[] {
 type PluginEntrypointKey = "manifest" | "worker" | "ui";
 
 type PluginEntrypointPath = {
@@ -315,7 +314,7 @@ export interface PluginRuntimeServices {
    * events.emit, config.get). Each plugin gets its own set of handlers
    * scoped to its capabilities and plugin ID.
    */
-  buildHostHandlers: (pluginId: string, manifest: CiutatisPluginManifestV1) => WorkerToHostHandlers;
+  buildHostHandlers: (pluginId: string, manifest: PaperclipPluginManifestV1) => WorkerToHostHandlers;
   /**
    * Host instance information passed to the worker during initialization.
    * Includes the instance ID and host version.
@@ -417,7 +416,7 @@ export interface PluginLoader {
   discoverFromLocalFilesystem(dir?: string): Promise<PluginDiscoveryResult>;
 
   /**
-   * Discover Ciutatis plugins installed as npm packages in the current
+   * Discover Paperclip plugins installed as npm packages in the current
    * Node.js environment matching the "paperclip-plugin-*" naming convention.
    *
    * Looks for packages in node_modules that match the naming convention.
@@ -433,12 +432,12 @@ export interface PluginLoader {
    * the "paperclipPlugin.manifest" key, loads the manifest module, and
    * validates it against the plugin manifest schema.
    *
-   * Returns null if the package is not a Ciutatis plugin.
-   * Throws if the package is a Ciutatis plugin but the manifest is invalid.
+   * Returns null if the package is not a Paperclip plugin.
+   * Throws if the package is a Paperclip plugin but the manifest is invalid.
    *
    * @see PLUGIN_SPEC.md §10 — Package Contract
    */
-  loadManifest(packagePath: string): Promise<CiutatisPluginManifestV1 | null>;
+  loadManifest(packagePath: string): Promise<PaperclipPluginManifestV1 | null>;
 
   /**
    * Install a plugin package and register it in the database.
@@ -471,8 +470,8 @@ export interface PluginLoader {
    * @see PLUGIN_SPEC.md §25.3 — Upgrade Lifecycle
    */
   upgradePlugin(pluginId: string, options: Omit<PluginInstallOptions, "installDir">): Promise<{
-    oldManifest: CiutatisPluginManifestV1;
-    newManifest: CiutatisPluginManifestV1;
+    oldManifest: PaperclipPluginManifestV1;
+    newManifest: PaperclipPluginManifestV1;
     discovered: DiscoveredPlugin;
   }>;
 
@@ -581,7 +580,7 @@ export interface PluginLoader {
 // ---------------------------------------------------------------------------
 
 /**
- * Check whether a package name matches the Ciutatis plugin naming convention.
+ * Check whether a package name matches the Paperclip plugin naming convention.
  * Accepts both the "paperclip-plugin-" prefix and scoped "@scope/plugin-" packages.
  *
  * @see PLUGIN_SPEC.md §10 — Package Contract
@@ -977,8 +976,8 @@ function compareSemver(left: string, right: string): number {
   return 0;
 }
 
-function getMinimumHostVersion(manifest: CiutatisPluginManifestV1): string | undefined {
-  return manifest.minimumHostVersion ?? manifest.minimumCiutatisVersion;
+function getMinimumHostVersion(manifest: PaperclipPluginManifestV1): string | undefined {
+  return manifest.minimumHostVersion ?? manifest.minimumPaperclipVersion;
 }
 
 /**
@@ -989,7 +988,7 @@ function getMinimumHostVersion(manifest: CiutatisPluginManifestV1): string | und
  * `launchers` field and the preferred `ui.launchers` field.
  */
 export function getPluginUiContributionMetadata(
-  manifest: CiutatisPluginManifestV1,
+  manifest: PaperclipPluginManifestV1,
 ): PluginUiContributionMetadata | null {
   const slots = manifest.ui?.slots ?? [];
   const launchers = [
@@ -1084,7 +1083,7 @@ export function pluginLoader(
   const log = logger.child({ service: "plugin-loader" });
   const hostVersion = runtimeServices?.instanceInfo.hostVersion;
 
-  async function assertPageRoutePathsAvailable(manifest: CiutatisPluginManifestV1): Promise<void> {
+  async function assertPageRoutePathsAvailable(manifest: PaperclipPluginManifestV1): Promise<void> {
     const requestedRoutePaths = getDeclaredPageRoutePaths(manifest);
     if (requestedRoutePaths.length === 0) return;
 
@@ -1096,7 +1095,7 @@ export function pluginLoader(
     const installedPlugins = await registry.listInstalled();
     for (const plugin of installedPlugins) {
       if (plugin.pluginKey === manifest.id) continue;
-      const installedManifest = plugin.manifestJson as CiutatisPluginManifestV1 | null;
+      const installedManifest = plugin.manifestJson as PaperclipPluginManifestV1 | null;
       if (!installedManifest) continue;
       const installedRoutePaths = new Set(getDeclaredPageRoutePaths(installedManifest));
       const conflictingRoute = requestedRoutePaths.find((routePath) => installedRoutePaths.has(routePath));
@@ -1214,7 +1213,6 @@ export function pluginLoader(
         ? formatLocalPluginManualBuildHint(resolvedPackagePath, pkgJson)
         : "";
       throw new Error(
-        `Package ${resolvedPackageName} at ${resolvedPackagePath} does not appear to be a Ciutatis plugin (no manifest found).`,
         `Package ${resolvedPackageName} at ${resolvedPackagePath} does not appear to be a Paperclip plugin (no manifest found).${manualBuildHint}`,
       );
     }
@@ -1269,7 +1267,7 @@ export function pluginLoader(
    */
   async function loadManifestFromPath(
     manifestPath: string,
-  ): Promise<CiutatisPluginManifestV1> {
+  ): Promise<PaperclipPluginManifestV1> {
     let raw: unknown;
 
     try {
@@ -1291,7 +1289,7 @@ export function pluginLoader(
 
   async function loadManifestFromPackageRoot(
     packageRoot: string,
-  ): Promise<CiutatisPluginManifestV1 | null> {
+  ): Promise<PaperclipPluginManifestV1 | null> {
     const pkgJson = await readPackageJson(packageRoot);
     if (!pkgJson) return null;
 
@@ -1336,7 +1334,7 @@ export function pluginLoader(
 
   /**
    * Build a DiscoveredPlugin from a resolved package directory, or null
-   * if the package is not a Ciutatis plugin.
+   * if the package is not a Paperclip plugin.
    */
   async function buildDiscoveredPlugin(
     packagePath: string,
@@ -1349,10 +1347,10 @@ export function pluginLoader(
     const version = typeof pkgJson["version"] === "string" ? pkgJson["version"] : "0.0.0";
 
     // Determine if this is a plugin package at all
-    const hasCiutatisPlugin = "paperclipPlugin" in pkgJson;
+    const hasPaperclipPlugin = "paperclipPlugin" in pkgJson;
     const nameMatchesConvention = isPluginPackageName(packageName);
 
-    if (!hasCiutatisPlugin && !nameMatchesConvention) {
+    if (!hasPaperclipPlugin && !nameMatchesConvention) {
       return null;
     }
 
@@ -1622,15 +1620,15 @@ export function pluginLoader(
     // loadManifest
     // -----------------------------------------------------------------------
 
-    async loadManifest(packagePath: string): Promise<CiutatisPluginManifestV1 | null> {
+    async loadManifest(packagePath: string): Promise<PaperclipPluginManifestV1 | null> {
       const pkgJson = await readPackageJson(packagePath);
       if (!pkgJson) return null;
 
-      const hasCiutatisPlugin = "paperclipPlugin" in pkgJson;
+      const hasPaperclipPlugin = "paperclipPlugin" in pkgJson;
       const packageName = typeof pkgJson["name"] === "string" ? pkgJson["name"] : "";
       const nameMatchesConvention = isPluginPackageName(packageName);
 
-      if (!hasCiutatisPlugin && !nameMatchesConvention) {
+      if (!hasPaperclipPlugin && !nameMatchesConvention) {
         return null;
       }
 
@@ -1711,15 +1709,15 @@ export function pluginLoader(
       pluginId: string,
       upgradeOptions: Omit<PluginInstallOptions, "installDir">,
     ): Promise<{
-      oldManifest: CiutatisPluginManifestV1;
-      newManifest: CiutatisPluginManifestV1;
+      oldManifest: PaperclipPluginManifestV1;
+      newManifest: PaperclipPluginManifestV1;
       discovered: DiscoveredPlugin;
     }> {
       const plugin = (await registry.getById(pluginId)) as {
         id: string;
         packageName: string;
         packagePath: string | null;
-        manifestJson: CiutatisPluginManifestV1;
+        manifestJson: PaperclipPluginManifestV1;
       } | null;
       if (!plugin) throw new Error(`Plugin not found: ${pluginId}`);
 

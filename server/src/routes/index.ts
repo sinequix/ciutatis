@@ -22,7 +22,6 @@ export { resourceMembershipRoutes } from "./resource-memberships.js";
 export { inboxDismissalRoutes } from "./inbox-dismissals.js";
 export { llmRoutes } from "./llms.js";
 export { accessRoutes } from "./access.js";
-export { adapterRoutes } from "./adapters.js";
 export { instanceSettingsRoutes } from "./instance-settings.js";
 export { instanceDatabaseBackupRoutes } from "./instance-database-backups.js";
 export { cloudUpstreamRoutes } from "./cloud-upstreams.js";

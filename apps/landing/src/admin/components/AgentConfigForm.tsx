@@ -113,6 +113,10 @@ function parseCommaArgs(value: string): string[] {
     .filter(Boolean);
 }
 
+export function supportsAdapterModelRefresh(adapterType: string): boolean {
+  return adapterType === "claude_local" || adapterType === "codex_local";
+}
+
 function formatArgList(value: unknown): string {
   if (Array.isArray(value)) {
     return value

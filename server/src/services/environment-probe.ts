@@ -1,6 +1,6 @@
 import type { Environment, EnvironmentProbeResult } from "@paperclipai/shared";
 import type { Db } from "@paperclipai/db";
-import { ensureSshWorkspaceReady, type SshConnectionConfig } from "@paperclipai/adapter-utils/ssh";
+import { ensureSshWorkspaceReady } from "@paperclipai/adapter-utils/ssh";
 import {
   parseEnvironmentDriverConfig,
   resolveEnvironmentDriverConfigForRuntime,
@@ -47,7 +47,6 @@ export async function probeEnvironment(
   }
 
   if (parsed.driver === "sandbox") {
-    if (!isBuiltinSandboxProvider(parsed.config.provider!)) {
     if (options.acquireSandboxRuntimeLease) {
       if (!resolvedCompanyId) {
         return {
@@ -144,7 +143,6 @@ export async function probeEnvironment(
       if (!options.pluginWorkerManager) {
         return {
           ok: false,
-          success: false,
           driver: "sandbox",
           summary: `Sandbox provider "${parsed.config.provider}" requires a running provider plugin.`,
           details: {
@@ -168,7 +166,6 @@ export async function probeEnvironment(
     if (!options.pluginWorkerManager) {
       return {
         ok: false,
-        success: false,
         driver: "plugin",
         summary: `Plugin environment probes require a plugin worker manager for "${parsed.config.pluginKey}:${parsed.config.driverKey}".`,
         details: {
@@ -187,7 +184,7 @@ export async function probeEnvironment(
   }
 
   try {
-    const { remoteCwd } = await ensureSshWorkspaceReady(parsed.config as unknown as SshConnectionConfig);
+    const { remoteCwd } = await ensureSshWorkspaceReady(parsed.config);
 
     return {
       ok: true,
@@ -222,7 +219,6 @@ export async function probeEnvironment(
 
     return {
       ok: false,
-      success: false,
       driver: "ssh",
       summary: `SSH probe failed for ${parsed.config.username}@${parsed.config.host}.`,
       details: {

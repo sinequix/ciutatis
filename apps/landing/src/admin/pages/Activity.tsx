@@ -20,27 +20,6 @@ import {
 } from "@/components/ui/select";
 import { History } from "lucide-react";
 import type { Agent } from "@paperclipai/shared";
-import { Card } from "@/components/ui/card";
-
-const ACTIVITY_PAGE_LIMIT = 200;
-
-function detailString(event: ActivityEvent, ...keys: string[]) {
-  const details = event.details;
-  for (const key of keys) {
-    const value = details?.[key];
-    if (typeof value === "string" && value.trim()) return value;
-  }
-  return null;
-}
-
-function activityEntityName(event: ActivityEvent) {
-  if (event.entityType === "issue") return detailString(event, "identifier", "issueIdentifier");
-  if (event.entityType === "project") return detailString(event, "projectName", "name", "title");
-  if (event.entityType === "goal") return detailString(event, "goalTitle", "title", "name");
-  return detailString(event, "name", "title");
-
-function activityEntityTitle(event: ActivityEvent) {
-  if (event.entityType === "issue") return detailString(event, "issueTitle", "title");
 
 export function Activity() {
   const { selectedCompanyId } = useCompany();

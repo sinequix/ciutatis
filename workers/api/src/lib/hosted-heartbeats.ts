@@ -12,7 +12,8 @@ import {
   projects,
   type Db,
 } from "@ciutatis/db-cloudflare";
-import { execute as executeCloudflareWorkersAi } from "@ciutatis/adapter-cloudflare-workers-ai/server";
+import type { ExecutionContext } from "hono";
+import { execute as executeCloudflareWorkersAi } from "@ciutatis/adapter-cloudflare-workers-ai/workers";
 import type { Env } from "./types.js";
 
 interface UsageSummary {

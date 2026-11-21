@@ -4,6 +4,107 @@ import { ExternalLink } from "lucide-react";
 import { executionWorkspacesApi } from "../api/execution-workspaces";
 import { queryKeys } from "../lib/queryKeys";
 
+type ConfiguredRuntimeServicePort = {
+  collection: "commands" | "services";
+  index: number;
+  name: string;
+  port: number | null;
+  invalidPort: boolean;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function readPort(portConfig: unknown): { port: number | null; invalidPort: boolean } {
+  if (typeof portConfig === "number") {
+    return {
+      port: portConfig,
+      invalidPort: !Number.isInteger(portConfig) || portConfig < 1 || portConfig > 65535,
+    };
+  }
+  if (isRecord(portConfig) && Object.hasOwn(portConfig, "value")) {
+    const value = portConfig.value;
+    if (typeof value !== "number") return { port: null, invalidPort: true };
+    return {
+      port: value,
+      invalidPort: !Number.isInteger(value) || value < 1 || value > 65535,
+    };
+  }
+  return { port: null, invalidPort: false };
+}
+
+export function readConfiguredRuntimeServicePorts(runtimeConfig: Record<string, unknown> | null) {
+  if (!runtimeConfig) return [];
+  const entries: ConfiguredRuntimeServicePort[] = [];
+  const addServices = (
+    collection: ConfiguredRuntimeServicePort["collection"],
+    services: unknown,
+    commandsRequireServiceKind: boolean,
+  ) => {
+    if (!Array.isArray(services)) return;
+    services.forEach((service, index) => {
+      if (!isRecord(service)) return;
+      if (commandsRequireServiceKind && service.kind !== "service") return;
+      const parsed = readPort(service.port);
+      const name = service.name;
+      entries.push({
+        collection,
+        index,
+        name: typeof name === "string" && name.trim() ? name : `Service ${index + 1}`,
+        port: parsed.port,
+        invalidPort: parsed.invalidPort,
+      });
+    });
+  };
+  addServices("commands", runtimeConfig.commands, true);
+  addServices("services", runtimeConfig.services, false);
+  return entries;
+}
+
+export function updateConfiguredRuntimeServicePort(input: {
+  runtimeConfig: Record<string, unknown>;
+  service: ConfiguredRuntimeServicePort;
+  port: string;
+}) {
+  const runtimeConfig = structuredClone(input.runtimeConfig);
+  const entries = runtimeConfig[input.service.collection];
+  if (!Array.isArray(entries)) return runtimeConfig;
+  const entry = entries[input.service.index];
+  if (!isRecord(entry)) return runtimeConfig;
+  const existingPort = isRecord(entry.port) ? entry.port : null;
+  const trimmedPort = input.port.trim();
+  if (!trimmedPort) {
+    if (existingPort) {
+      const autoPort: Record<string, unknown> = { ...existingPort, type: "auto" };
+      delete autoPort.value;
+      entry.port = autoPort;
+    } else {
+      delete entry.port;
+    }
+    return runtimeConfig;
+  }
+  const port = Number(trimmedPort);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return runtimeConfig;
+  entry.port = { ...existingPort, type: "fixed", value: port };
+  return runtimeConfig;
+}
+
+export function getConfiguredRuntimeServicePortWarnings(services: ConfiguredRuntimeServicePort[]) {
+  const servicesByPort = new Map<number, ConfiguredRuntimeServicePort[]>();
+  for (const service of services) {
+    if (service.invalidPort || service.port === null) continue;
+    const servicesForPort = servicesByPort.get(service.port) ?? [];
+    servicesForPort.push(service);
+    servicesByPort.set(service.port, servicesForPort);
+  }
+  return Array.from(servicesByPort.entries())
+    .filter(([, servicesForPort]) => servicesForPort.length > 1)
+    .map(([port, servicesForPort]) =>
+      `Port ${port} is assigned to multiple services: ${servicesForPort.map((service) => service.name).join(", ")}.`,
+    );
+}
+
 function isSafeExternalUrl(value: string | null | undefined) {
   if (!value) return false;
   try {

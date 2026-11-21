@@ -23,16 +23,12 @@ function findConfigFileFromAncestors(startDir: string): string | null {
   return null;
 }
 
-export function resolveCiutatisConfigPath(overridePath?: string): string {
+export function resolvePaperclipConfigPath(overridePath?: string): string {
   if (overridePath) return path.resolve(overridePath);
   if (process.env.PAPERCLIP_CONFIG) return path.resolve(process.env.PAPERCLIP_CONFIG);
   return findConfigFileFromAncestors(process.cwd()) ?? resolveDefaultConfigPath();
 }
 
-export const resolvePaperclipConfigPath = resolveCiutatisConfigPath;
-
-export function resolveCiutatisEnvPath(overrideConfigPath?: string): string {
-  return path.resolve(path.dirname(resolveCiutatisConfigPath(overrideConfigPath)), PAPERCLIP_ENV_FILENAME);
+export function resolvePaperclipEnvPath(overrideConfigPath?: string): string {
+  return path.resolve(path.dirname(resolvePaperclipConfigPath(overrideConfigPath)), PAPERCLIP_ENV_FILENAME);
 }
-
-export const resolvePaperclipEnvPath = resolveCiutatisEnvPath;

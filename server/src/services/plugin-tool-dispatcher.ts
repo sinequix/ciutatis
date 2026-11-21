@@ -24,7 +24,7 @@
 
 import type { Db } from "@paperclipai/db";
 import type {
-  CiutatisPluginManifestV1,
+  PaperclipPluginManifestV1,
   PluginRecord,
 } from "@paperclipai/shared";
 import type { ToolRunContext, ToolResult } from "@paperclipai/plugin-sdk";
@@ -159,8 +159,6 @@ export interface PluginToolDispatcher {
    *   every tool dispatch fails with `worker for plugin X is not running`.
    */
   registerPluginTools(
-    pluginId: string,
-    manifest: CiutatisPluginManifestV1,
     pluginKey: string,
     manifest: PaperclipPluginManifestV1,
     pluginDbId: string,
@@ -435,8 +433,6 @@ export function createPluginToolDispatcher(
     },
 
     registerPluginTools(
-      pluginId: string,
-      manifest: CiutatisPluginManifestV1,
       pluginKey: string,
       manifest: PaperclipPluginManifestV1,
       pluginDbId: string,

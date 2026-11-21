@@ -119,45 +119,13 @@ export function documentService(db: Db) {
     ) => {
       const [planDocument, documentSummaries] = await Promise.all([
         db
-          .select({
-            id: documents.id,
-            companyId: documents.companyId,
-            issueId: issueDocuments.issueId,
-            key: issueDocuments.key,
-            title: documents.title,
-            format: documents.format,
-            latestBody: documents.latestBody,
-            latestRevisionId: documents.latestRevisionId,
-            latestRevisionNumber: documents.latestRevisionNumber,
-            createdByAgentId: documents.createdByAgentId,
-            createdByUserId: documents.createdByUserId,
-            updatedByAgentId: documents.updatedByAgentId,
-            updatedByUserId: documents.updatedByUserId,
-            createdAt: documents.createdAt,
-            updatedAt: documents.updatedAt,
-          })
+          .select(issueDocumentSelect)
           .from(issueDocuments)
           .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
           .where(and(eq(issueDocuments.issueId, issue.id), eq(issueDocuments.key, "plan")))
           .then((rows) => rows[0] ?? null),
         db
-          .select({
-            id: documents.id,
-            companyId: documents.companyId,
-            issueId: issueDocuments.issueId,
-            key: issueDocuments.key,
-            title: documents.title,
-            format: documents.format,
-            latestBody: documents.latestBody,
-            latestRevisionId: documents.latestRevisionId,
-            latestRevisionNumber: documents.latestRevisionNumber,
-            createdByAgentId: documents.createdByAgentId,
-            createdByUserId: documents.createdByUserId,
-            updatedByAgentId: documents.updatedByAgentId,
-            updatedByUserId: documents.updatedByUserId,
-            createdAt: documents.createdAt,
-            updatedAt: documents.updatedAt,
-          })
+          .select(issueDocumentSelect)
           .from(issueDocuments)
           .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
           .where(eq(issueDocuments.issueId, issue.id))
@@ -182,23 +150,7 @@ export function documentService(db: Db) {
 
     listIssueDocuments: async (issueId: string, options: { includeSystem?: boolean } = {}) => {
       const rows = await db
-        .select({
-          id: documents.id,
-          companyId: documents.companyId,
-          issueId: issueDocuments.issueId,
-          key: issueDocuments.key,
-          title: documents.title,
-          format: documents.format,
-          latestBody: documents.latestBody,
-          latestRevisionId: documents.latestRevisionId,
-          latestRevisionNumber: documents.latestRevisionNumber,
-          createdByAgentId: documents.createdByAgentId,
-          createdByUserId: documents.createdByUserId,
-          updatedByAgentId: documents.updatedByAgentId,
-          updatedByUserId: documents.updatedByUserId,
-          createdAt: documents.createdAt,
-          updatedAt: documents.updatedAt,
-        })
+        .select(issueDocumentSelect)
         .from(issueDocuments)
         .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
         .where(eq(issueDocuments.issueId, issueId))
@@ -209,23 +161,7 @@ export function documentService(db: Db) {
     getIssueDocumentByKey: async (issueId: string, rawKey: string) => {
       const key = normalizeDocumentKey(rawKey);
       const row = await db
-        .select({
-          id: documents.id,
-          companyId: documents.companyId,
-          issueId: issueDocuments.issueId,
-          key: issueDocuments.key,
-          title: documents.title,
-          format: documents.format,
-          latestBody: documents.latestBody,
-          latestRevisionId: documents.latestRevisionId,
-          latestRevisionNumber: documents.latestRevisionNumber,
-          createdByAgentId: documents.createdByAgentId,
-          createdByUserId: documents.createdByUserId,
-          updatedByAgentId: documents.updatedByAgentId,
-          updatedByUserId: documents.updatedByUserId,
-          createdAt: documents.createdAt,
-          updatedAt: documents.updatedAt,
-        })
+        .select(issueDocumentSelect)
         .from(issueDocuments)
         .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
         .where(and(eq(issueDocuments.issueId, issueId), eq(issueDocuments.key, key)))
@@ -243,6 +179,8 @@ export function documentService(db: Db) {
           issueId: issueDocuments.issueId,
           key: issueDocuments.key,
           revisionNumber: documentRevisions.revisionNumber,
+          title: documentRevisions.title,
+          format: documentRevisions.format,
           body: documentRevisions.body,
           changeSummary: documentRevisions.changeSummary,
           createdByAgentId: documentRevisions.createdByAgentId,
@@ -427,10 +365,13 @@ export function documentService(db: Db) {
                 companyId: issue.companyId,
                 documentId: existing.id,
                 revisionNumber: nextRevisionNumber,
+                title: input.title ?? null,
+                format: input.format,
                 body: input.body,
                 changeSummary: input.changeSummary ?? null,
                 createdByAgentId: input.createdByAgentId ?? null,
                 createdByUserId: input.createdByUserId ?? null,
+                createdByRunId: input.createdByRunId ?? null,
                 createdAt: now,
               })
               .returning();
@@ -507,10 +448,13 @@ export function documentService(db: Db) {
               companyId: issue.companyId,
               documentId: document.id,
               revisionNumber: 1,
+              title: input.title ?? null,
+              format: input.format,
               body: input.body,
               changeSummary: input.changeSummary ?? null,
               createdByAgentId: input.createdByAgentId ?? null,
               createdByUserId: input.createdByUserId ?? null,
+              createdByRunId: input.createdByRunId ?? null,
               createdAt: now,
             })
             .returning();
@@ -772,23 +716,7 @@ export function documentService(db: Db) {
       const key = normalizeDocumentKey(rawKey);
       return db.transaction(async (tx) => {
         const existing = await tx
-          .select({
-            id: documents.id,
-            companyId: documents.companyId,
-            issueId: issueDocuments.issueId,
-            key: issueDocuments.key,
-            title: documents.title,
-            format: documents.format,
-            latestBody: documents.latestBody,
-            latestRevisionId: documents.latestRevisionId,
-            latestRevisionNumber: documents.latestRevisionNumber,
-            createdByAgentId: documents.createdByAgentId,
-            createdByUserId: documents.createdByUserId,
-            updatedByAgentId: documents.updatedByAgentId,
-            updatedByUserId: documents.updatedByUserId,
-            createdAt: documents.createdAt,
-            updatedAt: documents.updatedAt,
-          })
+          .select(issueDocumentSelect)
           .from(issueDocuments)
           .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
           .where(and(eq(issueDocuments.issueId, issueId), eq(issueDocuments.key, key)))

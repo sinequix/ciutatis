@@ -1,6 +1,6 @@
-import { definePlugin, runWorker } from "@paperclipai/plugin-sdk";
+import { definePlugin, runWorker, type CiutatisPlugin } from "@paperclipai/plugin-sdk";
 
-const plugin = definePlugin({
+const plugin: CiutatisPlugin = definePlugin({
   async setup(ctx) {
     ctx.events.on("issue.created", async (event) => {
       const issueId = event.entityId ?? "unknown";

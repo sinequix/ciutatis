@@ -219,7 +219,7 @@ export function executionWorkspaceRoutes(db: Db, opts: { pluginWorkerManager?: P
       ? listConfiguredRuntimeServiceEntries({ workspaceRuntime: effectiveRuntimeConfig })
       : [];
     const workspaceCommand = effectiveRuntimeConfig
-      ? findWorkspaceCommandDefinition(effectiveRuntimeConfig as Record<string, unknown>, target.workspaceCommandId ?? null)
+      ? findWorkspaceCommandDefinition(effectiveRuntimeConfig, target.workspaceCommandId ?? null)
       : null;
     if (target.workspaceCommandId && !workspaceCommand) {
       res.status(404).json({ error: "Workspace command not found for this execution workspace" });
@@ -311,8 +311,8 @@ export function executionWorkspaceRoutes(db: Db, opts: { pluginWorkerManager?: P
               config: {
                 ...existing.config,
                 provisionCommand:
-                  (existing.config?.provisionCommand as string | null | undefined)
-                  ?? (projectPolicy?.workspaceStrategy?.provisionCommand as string | null | undefined)
+                  existing.config?.provisionCommand
+                  ?? projectPolicy?.workspaceStrategy?.provisionCommand
                   ?? null,
               },
             },
@@ -353,8 +353,8 @@ export function executionWorkspaceRoutes(db: Db, opts: { pluginWorkerManager?: P
                 }
               : null,
             workspace: availableWorkspace,
-            command: workspaceCommand.rawConfig ?? {} as Record<string, unknown>,
-            adapterEnv: {} as Record<string, string>,
+            command: workspaceCommand.rawConfig,
+            adapterEnv: {},
             recorder,
             metadata: {
               action,
@@ -407,7 +407,7 @@ export function executionWorkspaceRoutes(db: Db, opts: { pluginWorkerManager?: P
             workspace: availableWorkspace,
             executionWorkspaceId: existing.id,
             config: { workspaceRuntime: effectiveRuntimeConfig },
-            adapterEnv: {} as Record<string, string>,
+            adapterEnv: {},
             onLog,
             serviceIndex: selectedServiceIndex,
           });
@@ -417,7 +417,7 @@ export function executionWorkspaceRoutes(db: Db, opts: { pluginWorkerManager?: P
         }
 
         const currentDesiredState: WorkspaceRuntimeDesiredState =
-          (existing.config?.desiredState as WorkspaceRuntimeDesiredState | undefined)
+          existing.config?.desiredState
           ?? ((existing.runtimeServices ?? []).some((service) => service.status === "starting" || service.status === "running")
             ? "running"
             : "stopped");
@@ -427,12 +427,12 @@ export function executionWorkspaceRoutes(db: Db, opts: { pluginWorkerManager?: P
         } = selectedRuntimeServiceId && (selectedServiceIndex === undefined || selectedServiceIndex === null)
           ? {
               desiredState: currentDesiredState,
-              serviceStates: (existing.config?.serviceStates as WorkspaceRuntimeServiceStateMap | null | undefined) ?? null,
+              serviceStates: existing.config?.serviceStates ?? null,
             }
           : buildWorkspaceRuntimeDesiredStatePatch({
               config: { workspaceRuntime: effectiveRuntimeConfig },
               currentDesiredState,
-              currentServiceStates: (existing.config?.serviceStates as WorkspaceRuntimeServiceStateMap | null | undefined) ?? null,
+              currentServiceStates: existing.config?.serviceStates ?? null,
               action,
               serviceIndex: selectedServiceIndex,
             });
@@ -640,7 +640,7 @@ export function executionWorkspaceRoutes(db: Db, opts: { pluginWorkerManager?: P
 
       if (readiness.state === "blocked") {
         res.status(409).json({
-          error: (readiness.blockingReasons as string[])[0] ?? "Execution workspace cannot be closed right now",
+          error: readiness.blockingReasons[0] ?? "Execution workspace cannot be closed right now",
           closeReadiness: readiness,
         });
         return;

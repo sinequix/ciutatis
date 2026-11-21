@@ -22,7 +22,7 @@ import { fork, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { createInterface, type Interface as ReadlineInterface } from "node:readline";
-import type { CiutatisPluginManifestV1 } from "@paperclipai/shared";
+import type { PaperclipPluginManifestV1 } from "@paperclipai/shared";
 import {
   JSONRPC_VERSION,
   JSONRPC_ERROR_CODES,
@@ -161,7 +161,7 @@ export interface WorkerStartOptions {
   /** Absolute path to the plugin worker entrypoint (CJS bundle). */
   entrypointPath: string;
   /** Plugin manifest. */
-  manifest: CiutatisPluginManifestV1;
+  manifest: PaperclipPluginManifestV1;
   /** Resolved plugin configuration. */
   config: Record<string, unknown>;
   /** Host instance information for the initialize call. */
@@ -941,7 +941,7 @@ export function createPluginWorkerHandle(
 
     // Send the initialize RPC call
     const initParams: InitializeParams = {
-      manifest: options.manifest as unknown as InitializeParams["manifest"],
+      manifest: options.manifest,
       config: options.config,
       instanceInfo: options.instanceInfo,
       apiVersion: options.apiVersion,

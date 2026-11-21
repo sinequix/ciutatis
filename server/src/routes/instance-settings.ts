@@ -309,7 +309,7 @@ export function instanceSettingsRoutes(db: Db) {
   router.get("/instance/settings/general", async (req, res) => {
     // General settings (e.g. keyboardShortcuts) are readable by any
     // authenticated org member or instance admin. Only PATCH requires instance-admin.
-    assertBoardOrgAccess(req, "instance");
+    assertBoardOrgAccess(req);
     res.json(await svc.getGeneral());
   });
 
@@ -353,7 +353,7 @@ export function instanceSettingsRoutes(db: Db) {
   router.get("/instance/settings/experimental", async (req, res) => {
     // Experimental settings are readable by any authenticated org member
     // or instance admin. Only PATCH requires instance-admin.
-    assertBoardOrgAccess(req, "instance");
+    assertBoardOrgAccess(req);
     // or instance admin. Updating them remains instance-admin only because
     // this payload includes instance-wide operational controls.
     assertBoardOrgAccess(req);
@@ -446,7 +446,7 @@ export function instanceSettingsRoutes(db: Db) {
   );
 
   router.get("/instance/settings/tenant-provisioning", async (req, res) => {
-    assertBoardOrgAccess(req, "instance");
+    assertBoardOrgAccess(req);
     res.json(await getTenantProvisioningSettings());
   });
 
@@ -467,7 +467,7 @@ export function instanceSettingsRoutes(db: Db) {
   );
 
   router.get("/instance/settings/cloudflare", async (req, res) => {
-    assertBoardOrgAccess(req, "instance");
+    assertBoardOrgAccess(req);
     res.json(await getCloudflareProvisioningSettings());
   });
 
@@ -521,7 +521,7 @@ export function instanceSettingsRoutes(db: Db) {
   });
 
   router.get("/instance/settings/admin-overview", async (req, res) => {
-    assertBoardOrgAccess(req, "instance");
+    assertBoardOrgAccess(req);
     const [tenants, cloudflare, jobs] = await Promise.all([
       listTenantResponses(),
       getCloudflareProvisioningSettings(),
@@ -577,7 +577,7 @@ export function instanceSettingsRoutes(db: Db) {
   });
 
   router.get("/instance/settings/tenants", async (req, res) => {
-    assertBoardOrgAccess(req, "instance");
+    assertBoardOrgAccess(req);
     res.json(await listTenantResponses());
   });
 
@@ -699,7 +699,7 @@ export function instanceSettingsRoutes(db: Db) {
   );
 
   router.get("/instance/settings/tenants/:tenantId/jobs", async (req, res) => {
-    assertBoardOrgAccess(req, "instance");
+    assertBoardOrgAccess(req);
     const tenantId = req.params.tenantId as string;
     await loadTenantOrThrow(tenantId);
     const jobs = await db

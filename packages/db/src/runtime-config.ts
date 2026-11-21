@@ -37,39 +37,6 @@ export type ResolvedDatabaseTarget =
       envPath: string;
     };
 
-function expandHomePrefix(value: string): string {
-  if (value === "~") return os.homedir();
-  if (value.startsWith("~/")) return path.resolve(os.homedir(), value.slice(2));
-  return value;
-}
-
-function resolveCiutatisHomeDir(): string {
-  const envHome = process.env.PAPERCLIP_HOME?.trim();
-  if (envHome) return path.resolve(expandHomePrefix(envHome));
-  return path.resolve(os.homedir(), ".paperclip");
-}
-
-function resolveCiutatisInstanceId(): string {
-  const raw = process.env.PAPERCLIP_INSTANCE_ID?.trim() || DEFAULT_INSTANCE_ID;
-  if (!INSTANCE_ID_RE.test(raw)) {
-    throw new Error(`Invalid PAPERCLIP_INSTANCE_ID '${raw}'.`);
-  }
-  return raw;
-}
-
-function resolveDefaultConfigPath(): string {
-  return path.resolve(
-    resolveCiutatisHomeDir(),
-    "instances",
-    resolveCiutatisInstanceId(),
-    CONFIG_BASENAME,
-  );
-}
-
-function resolveDefaultEmbeddedPostgresDir(): string {
-  return path.resolve(resolveCiutatisHomeDir(), "instances", resolveCiutatisInstanceId(), "db");
-}
-
 function resolveHomeAwarePath(value: string): string {
   return path.resolve(expandHomePrefix(value));
 }
@@ -87,15 +54,13 @@ function findConfigFileFromAncestors(startDir: string): string | null {
   }
 }
 
-function resolveCiutatisConfigPath(): string {
+function resolvePaperclipConfigPath(): string {
   if (process.env.PAPERCLIP_CONFIG?.trim()) {
     return path.resolve(process.env.PAPERCLIP_CONFIG.trim());
   }
   return findConfigFileFromAncestors(process.cwd()) ?? resolvePaperclipConfigPathForInstance();
 }
 
-function resolveCiutatisEnvPath(configPath: string): string {
-  return path.resolve(path.dirname(configPath), ENV_BASENAME);
 function resolvePaperclipEnvPath(configPath: string): string {
   return resolvePaperclipEnvPathForConfig(configPath);
 }
@@ -217,8 +182,8 @@ function readConfig(configPath: string): PartialConfig | null {
 }
 
 export function resolveDatabaseTarget(): ResolvedDatabaseTarget {
-  const configPath = resolveCiutatisConfigPath();
-  const envPath = resolveCiutatisEnvPath(configPath);
+  const configPath = resolvePaperclipConfigPath();
+  const envPath = resolvePaperclipEnvPath(configPath);
   const envEntries = readEnvEntries(envPath);
 
   const envUrl = process.env.DATABASE_URL?.trim();

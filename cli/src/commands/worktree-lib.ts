@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import path from "node:path";
-import type { CiutatisConfig } from "../config/schema.js";
+import type { PaperclipConfig } from "../config/schema.js";
 import { expandHomePrefix } from "../config/home.js";
 
 export const DEFAULT_WORKTREE_HOME = "~/.paperclip-worktrees";
@@ -173,12 +173,12 @@ export function rewriteLocalUrlPort(rawUrl: string | undefined, port: number): s
 }
 
 export function buildWorktreeConfig(input: {
-  sourceConfig: CiutatisConfig | null;
+  sourceConfig: PaperclipConfig | null;
   paths: WorktreeLocalPaths;
   serverPort: number;
   databasePort: number;
   now?: Date;
-}): CiutatisConfig {
+}): PaperclipConfig {
   const { sourceConfig, paths, serverPort, databasePort } = input;
   const nowIso = (input.now ?? new Date()).toISOString();
 
@@ -210,6 +210,8 @@ export function buildWorktreeConfig(input: {
     server: {
       deploymentMode: source?.server.deploymentMode ?? "local_trusted",
       exposure: source?.server.exposure ?? "private",
+      ...(source?.server.bind ? { bind: source.server.bind } : {}),
+      ...(source?.server.customBindHost ? { customBindHost: source.server.customBindHost } : {}),
       host: source?.server.host ?? "127.0.0.1",
       port: serverPort,
       allowedHostnames: source?.server.allowedHostnames ?? [],
@@ -219,6 +221,9 @@ export function buildWorktreeConfig(input: {
       baseUrlMode: source?.auth.baseUrlMode ?? "auto",
       ...(authPublicBaseUrl ? { publicBaseUrl: authPublicBaseUrl } : {}),
       disableSignUp: source?.auth.disableSignUp ?? false,
+    },
+    telemetry: {
+      enabled: source?.telemetry?.enabled ?? true,
     },
     storage: {
       provider: source?.storage.provider ?? "local_disk",

@@ -1,24 +1,21 @@
-import type { CiutatisConfig } from "../config/schema.js";
+import { inferBindModeFromHost } from "@paperclipai/shared";
+import type { PaperclipConfig } from "../config/schema.js";
 import type { CheckResult } from "./index.js";
 
-function isLoopbackHost(host: string) {
-  const normalized = host.trim().toLowerCase();
-  return normalized === "127.0.0.1" || normalized === "localhost" || normalized === "::1";
-}
-
-export function deploymentAuthCheck(config: CiutatisConfig): CheckResult {
+export function deploymentAuthCheck(config: PaperclipConfig): CheckResult {
   const mode = config.server.deploymentMode;
   const exposure = config.server.exposure;
   const auth = config.auth;
+  const bind = config.server.bind ?? inferBindModeFromHost(config.server.host);
 
   if (mode === "local_trusted") {
-    if (!isLoopbackHost(config.server.host)) {
+    if (bind !== "loopback") {
       return {
         name: "Deployment/auth mode",
         status: "fail",
-        message: `local_trusted requires loopback host binding (found ${config.server.host})`,
+        message: `local_trusted requires loopback binding (found ${bind})`,
         canRepair: false,
-        repairHint: "Run `ciutatis configure --section server` and set host to 127.0.0.1",
+        repairHint: "Run `paperclipai configure --section server` and choose Local trusted / loopback reachability",
       };
     }
     return {
@@ -37,7 +34,7 @@ export function deploymentAuthCheck(config: CiutatisConfig): CheckResult {
       status: "fail",
       message: "authenticated mode requires BETTER_AUTH_SECRET (or PAPERCLIP_AGENT_JWT_SECRET)",
       canRepair: false,
-      repairHint: "Set BETTER_AUTH_SECRET before starting Ciutatis",
+      repairHint: "Set BETTER_AUTH_SECRET before starting Paperclip",
     };
   }
 
@@ -47,7 +44,7 @@ export function deploymentAuthCheck(config: CiutatisConfig): CheckResult {
       status: "fail",
       message: "auth.baseUrlMode=explicit requires auth.publicBaseUrl",
       canRepair: false,
-      repairHint: "Run `ciutatis configure --section server` and provide a base URL",
+      repairHint: "Run `paperclipai configure --section server` and provide a base URL",
     };
   }
 
@@ -58,7 +55,7 @@ export function deploymentAuthCheck(config: CiutatisConfig): CheckResult {
         status: "fail",
         message: "authenticated/public requires explicit auth.publicBaseUrl",
         canRepair: false,
-        repairHint: "Run `ciutatis configure --section server` and select public exposure",
+        repairHint: "Run `paperclipai configure --section server` and select public exposure",
       };
     }
     try {
@@ -78,7 +75,7 @@ export function deploymentAuthCheck(config: CiutatisConfig): CheckResult {
         status: "fail",
         message: "auth.publicBaseUrl is not a valid URL",
         canRepair: false,
-        repairHint: "Run `ciutatis configure --section server` and provide a valid URL",
+        repairHint: "Run `paperclipai configure --section server` and provide a valid URL",
       };
     }
   }
@@ -86,6 +83,6 @@ export function deploymentAuthCheck(config: CiutatisConfig): CheckResult {
   return {
     name: "Deployment/auth mode",
     status: "pass",
-    message: `Mode ${mode}/${exposure} with auth URL mode ${auth.baseUrlMode}`,
+    message: `Mode ${mode}/${exposure} with bind ${bind} and auth URL mode ${auth.baseUrlMode}`,
   };
 }

@@ -74,6 +74,7 @@ export {
   IssuesList,
   AssigneePicker,
   ProjectPicker,
+  ManagedRoutinesList,
 } from "./components.js";
 
 export type {
@@ -109,6 +110,8 @@ export type {
   AssigneePickerSelection,
   AssigneePickerProps,
   ProjectPickerProps,
+  ManagedRoutinesListItem,
+  ManagedRoutinesListProps,
 } from "./components.js";
 
 // Bridge error and host context types

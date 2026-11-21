@@ -1,10 +1,3 @@
-export {
-  issueService,
-  clampIssueListLimit,
-  ISSUE_LIST_DEFAULT_LIMIT,
-  ISSUE_LIST_MAX_LIMIT,
-  type IssueFilters,
-} from "./requestService.js";
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { and, asc, desc, eq, gt, gte, inArray, isNull, like, lt, ne, notInArray, or, sql, type SQL } from "drizzle-orm";

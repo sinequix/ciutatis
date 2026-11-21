@@ -1,19 +1,20 @@
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { bootstrapCeoInvite } from "./auth-bootstrap-ceo.js";
 import { onboard } from "./onboard.js";
 import { doctor } from "./doctor.js";
-import { loadCiutatisEnvFile } from "../config/env.js";
+import { loadPaperclipEnvFile } from "../config/env.js";
 import { configExists, resolveConfigPath } from "../config/store.js";
-import type { CiutatisConfig } from "../config/schema.js";
+import type { PaperclipConfig } from "../config/schema.js";
 import { readConfig } from "../config/store.js";
 import {
   describeLocalInstancePaths,
-  resolveCiutatisHomeDir,
-  resolveCiutatisInstanceId,
+  resolvePaperclipHomeDir,
+  resolvePaperclipInstanceId,
 } from "../config/home.js";
 
 interface RunOptions {
@@ -21,6 +22,7 @@ interface RunOptions {
   instance?: string;
   repair?: boolean;
   yes?: boolean;
+  bind?: "loopback" | "lan" | "tailnet";
 }
 
 interface StartedServer {
@@ -31,10 +33,10 @@ interface StartedServer {
 }
 
 export async function runCommand(opts: RunOptions): Promise<void> {
-  const instanceId = resolveCiutatisInstanceId(opts.instance);
+  const instanceId = resolvePaperclipInstanceId(opts.instance);
   process.env.PAPERCLIP_INSTANCE_ID = instanceId;
 
-  const homeDir = resolveCiutatisHomeDir();
+  const homeDir = resolvePaperclipHomeDir();
   fs.mkdirSync(homeDir, { recursive: true });
 
   const paths = describeLocalInstancePaths(instanceId);
@@ -42,9 +44,9 @@ export async function runCommand(opts: RunOptions): Promise<void> {
 
   const configPath = resolveConfigPath(opts.config);
   process.env.PAPERCLIP_CONFIG = configPath;
-  loadCiutatisEnvFile(configPath);
+  loadPaperclipEnvFile(configPath);
 
-  p.intro(pc.bgCyan(pc.black(" ciutatis run ")));
+  p.intro(pc.bgCyan(pc.black(" paperclipai run ")));
   p.log.message(pc.dim(`Home: ${paths.homeDir}`));
   p.log.message(pc.dim(`Instance: ${paths.instanceId}`));
   p.log.message(pc.dim(`Config: ${configPath}`));
@@ -52,12 +54,12 @@ export async function runCommand(opts: RunOptions): Promise<void> {
   if (!configExists(configPath)) {
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       p.log.error("No config found and terminal is non-interactive.");
-      p.log.message(`Run ${pc.cyan("ciutatis onboard")} once, then retry ${pc.cyan("ciutatis run")}.`);
+      p.log.message(`Run ${pc.cyan("paperclipai onboard")} once, then retry ${pc.cyan("paperclipai run")}.`);
       process.exit(1);
     }
 
     p.log.step("No config found. Starting onboarding...");
-    await onboard({ config: configPath, invokedByRun: true });
+    await onboard({ config: configPath, invokedByRun: true, bind: opts.bind });
   }
 
   p.log.step("Running doctor checks...");
@@ -78,7 +80,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
     process.exit(1);
   }
 
-  p.log.step("Starting Ciutatis server...");
+  p.log.step("Starting Paperclip server...");
   const startedServer = await importServerEntry();
 
   if (shouldGenerateBootstrapInviteAfterStart(config)) {
@@ -92,7 +94,7 @@ export async function runCommand(opts: RunOptions): Promise<void> {
 }
 
 function resolveBootstrapInviteBaseUrl(
-  config: CiutatisConfig,
+  config: PaperclipConfig,
   startedServer: StartedServer,
 ): string {
   const explicitBaseUrl =
@@ -146,11 +148,35 @@ function maybeEnableUiDevMiddleware(entrypoint: string): void {
   }
 }
 
+function ensureDevWorkspaceBuildDeps(projectRoot: string): void {
+  const buildScript = path.resolve(projectRoot, "scripts/ensure-plugin-build-deps.mjs");
+  if (!fs.existsSync(buildScript)) return;
+
+  const result = spawnSync(process.execPath, [buildScript], {
+    cwd: projectRoot,
+    stdio: "inherit",
+    timeout: 120_000,
+  });
+
+  if (result.error) {
+    throw new Error(
+      `Failed to prepare workspace build artifacts before starting the Paperclip dev server.\n${formatError(result.error)}`,
+    );
+  }
+
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(
+      "Failed to prepare workspace build artifacts before starting the Paperclip dev server.",
+    );
+  }
+}
+
 async function importServerEntry(): Promise<StartedServer> {
   // Dev mode: try local workspace path (monorepo with tsx)
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const devEntry = path.resolve(projectRoot, "server/src/index.ts");
   if (fs.existsSync(devEntry)) {
+    ensureDevWorkspaceBuildDeps(projectRoot);
     maybeEnableUiDevMiddleware(devEntry);
     const mod = await import(pathToFileURL(devEntry).href);
     return await startServerFromModule(mod, devEntry);
@@ -165,26 +191,26 @@ async function importServerEntry(): Promise<StartedServer> {
     const missingServerEntrypoint = !missingSpecifier || missingSpecifier === "@paperclipai/server";
     if (isModuleNotFoundError(err) && missingServerEntrypoint) {
       throw new Error(
-        `Could not locate a Ciutatis server entrypoint.\n` +
+        `Could not locate a Paperclip server entrypoint.\n` +
           `Tried: ${devEntry}, @paperclipai/server\n` +
           `${formatError(err)}`,
       );
     }
     throw new Error(
-      `Ciutatis server failed to start.\n` +
+      `Paperclip server failed to start.\n` +
         `${formatError(err)}`,
     );
   }
 }
 
-function shouldGenerateBootstrapInviteAfterStart(config: CiutatisConfig): boolean {
+function shouldGenerateBootstrapInviteAfterStart(config: PaperclipConfig): boolean {
   return config.server.deploymentMode === "authenticated" && config.database.mode === "embedded-postgres";
 }
 
 async function startServerFromModule(mod: unknown, label: string): Promise<StartedServer> {
   const startServer = (mod as { startServer?: () => Promise<StartedServer> }).startServer;
   if (typeof startServer !== "function") {
-    throw new Error(`Ciutatis server entrypoint did not export startServer(): ${label}`);
+    throw new Error(`Paperclip server entrypoint did not export startServer(): ${label}`);
   }
   return await startServer();
 }

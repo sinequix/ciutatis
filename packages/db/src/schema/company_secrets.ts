@@ -1,4 +1,3 @@
-export { institutionSecrets, institutionSecrets as companySecrets } from "./institution_secrets.js";
 import { sql } from "drizzle-orm";
 import { check, pgTable, uuid, text, timestamp, integer, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
@@ -48,6 +47,7 @@ export const companySecrets = pgTable(
       .where(sql`${table.scope} = 'company' and ${table.deletedAt} is null`),
     companyKeyUq: uniqueIndex("company_secrets_company_key_uq")
       .on(table.companyId, table.key)
+      .where(sql`${table.scope} = 'company' and ${table.deletedAt} is null`),
     userDefinitionOwnerUq: uniqueIndex("company_secrets_user_definition_owner_uq")
       .on(table.companyId, table.userSecretDefinitionId, table.ownerUserId)
       .where(sql`${table.scope} = 'user' and ${table.deletedAt} is null`),
@@ -62,5 +62,6 @@ export const companySecrets = pgTable(
         and ${table.ownerUserId} is not null
         and ${table.userSecretDefinitionId} is not null
       )`,
+    ),
   }),
 );

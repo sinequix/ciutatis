@@ -37,7 +37,7 @@ function parseBooleanEnv(value: string | undefined): boolean {
 }
 
 function jwtConfig() {
-  const secret = process.env.PAPERCLIP_AGENT_JWT_SECRET;
+  const secret = process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim() || process.env.BETTER_AUTH_SECRET?.trim();
   if (!secret) return null;
 
   return {

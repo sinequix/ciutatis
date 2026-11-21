@@ -259,7 +259,7 @@ export function issueTreeControlRoutes(db: Db) {
                 rootIssueId: root.id,
                 restoreHoldId: result.hold.id,
               },
-              requestedByActorType: (actor.actorType === "plugin" ? "system" : actor.actorType) as "system" | "agent" | "user",
+              requestedByActorType: actor.actorType,
               requestedByActorId: actor.actorId,
               contextSnapshot: {
                 issueId: restoredIssue.id,

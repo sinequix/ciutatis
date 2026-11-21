@@ -390,11 +390,11 @@ export function registerPluginCommands(program: Command): void {
     plugin
       .command("install <package>")
       .description(
-          "Install a plugin from a local path or npm package.\n" +
+        "Install a plugin from a local path or npm package.\n" +
           "  Examples:\n" +
-          "    ciutatis plugin install ./my-plugin              # local path\n" +
-          "    ciutatis plugin install @acme/plugin-linear      # npm package\n" +
-          "    ciutatis plugin install @acme/plugin-linear@1.2  # pinned version",
+          "    paperclipai plugin install ./my-plugin              # local path\n" +
+          "    paperclipai plugin install @acme/plugin-linear      # npm package\n" +
+          "    paperclipai plugin install @acme/plugin-linear@1.2  # pinned version",
       )
       .option("-l, --local", "Treat <package> as a local filesystem path", false)
       .option("--version <version>", "Specific npm version to install (npm packages only)")
@@ -658,7 +658,7 @@ export function registerPluginCommands(program: Command): void {
             console.log(
               `${pc.bold(ex.displayName)}  ${pc.dim(ex.pluginKey)}\n` +
                 `  ${ex.description}\n` +
-                `  ${pc.cyan(`ciutatis plugin install ${ex.localPath}`)}`,
+                `  ${pc.cyan(`paperclipai plugin install ${ex.localPath}`)}`,
             );
           }
         } catch (err) {

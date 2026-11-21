@@ -6,6 +6,26 @@ import path from "node:path";
 import { sanitizeRemoteExecutionEnv } from "./remote-execution-env.js";
 import { buildSshSpawnTarget, type SshRemoteExecutionSpec } from "./ssh.js";
 import { redactCommandText } from "./command-redaction.js";
+import {
+  asNumber,
+  asString,
+  buildPaperclipEnv as buildPaperclipEnvFrom,
+  joinPromptSections,
+  parseObject,
+  redactEnvForLogs,
+  renderTemplate,
+  resolvePathValue,
+} from "./portable.js";
+
+export {
+  asNumber,
+  asString,
+  joinPromptSections,
+  parseObject,
+  redactEnvForLogs,
+  renderTemplate,
+  resolvePathValue,
+};
 import type {
   AdapterSkillEntry,
   AdapterSkillSnapshot,
@@ -100,7 +120,6 @@ export const MAX_EXCERPT_BYTES = 32 * 1024;
 const TERMINAL_RESULT_SCAN_OVERLAP_CHARS = 64 * 1024;
 const DEFAULT_PAPERCLIP_INSTANCE_ID = "default";
 const PATH_SEGMENT_RE = /^[a-zA-Z0-9_-]+$/;
-const SENSITIVE_ENV_KEY = /(key|token|secret|password|passwd|authorization|cookie)/i;
 const REDACTED_LOG_VALUE = "***REDACTED***";
 const PAPERCLIP_SKILL_ROOT_RELATIVE_CANDIDATES = [
   "../../skills",
@@ -326,21 +345,6 @@ function resolveInstalledEntryTarget(
   return { targetPath: fullPath, kind: "file" };
 }
 
-export function parseObject(value: unknown): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return {};
-  }
-  return value as Record<string, unknown>;
-}
-
-export function asString(value: unknown, fallback: string): string {
-  return typeof value === "string" && value.length > 0 ? value : fallback;
-}
-
-export function asNumber(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
 export function asBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -376,42 +380,6 @@ export function appendWithByteCap(prev: string, chunk: string, cap = MAX_CAPTURE
 function resumeReadable(readable: { resume: () => unknown; destroyed?: boolean } | null | undefined) {
   if (!readable || readable.destroyed) return;
   readable.resume();
-}
-
-export function resolvePathValue(obj: Record<string, unknown>, dottedPath: string) {
-  const parts = dottedPath.split(".");
-  let cursor: unknown = obj;
-
-  for (const part of parts) {
-    if (typeof cursor !== "object" || cursor === null || Array.isArray(cursor)) {
-      return "";
-    }
-    cursor = (cursor as Record<string, unknown>)[part];
-  }
-
-  if (cursor === null || cursor === undefined) return "";
-  if (typeof cursor === "string") return cursor;
-  if (typeof cursor === "number" || typeof cursor === "boolean") return String(cursor);
-
-  try {
-    return JSON.stringify(cursor);
-  } catch {
-    return "";
-  }
-}
-
-export function renderTemplate(template: string, data: Record<string, unknown>) {
-  return template.replace(/{{\s*([a-zA-Z0-9_.-]+)\s*}}/g, (_, path) => resolvePathValue(data, path));
-}
-
-export function joinPromptSections(
-  sections: Array<string | null | undefined>,
-  separator = "\n\n",
-) {
-  return sections
-    .map((value) => (typeof value === "string" ? value.trim() : ""))
-    .filter(Boolean)
-    .join(separator);
 }
 
 type PaperclipWakeIssue = {
@@ -1670,14 +1638,6 @@ export function renderPaperclipWakePrompt(
   return lines.join("\n").trim();
 }
 
-export function redactEnvForLogs(env: Record<string, string>): Record<string, string> {
-  const redacted: Record<string, string> = {};
-  for (const [key, value] of Object.entries(env)) {
-    redacted[key] = SENSITIVE_ENV_KEY.test(key) ? REDACTED_LOG_VALUE : value;
-  }
-  return redacted;
-}
-
 export function redactCommandTextForLogs(command: string): string {
   return redactCommandText(command, REDACTED_LOG_VALUE);
 }
@@ -1710,26 +1670,7 @@ export function buildInvocationEnvForLogs(
 }
 
 export function buildPaperclipEnv(agent: { id: string; companyId: string }): Record<string, string> {
-  const resolveHostForUrl = (rawHost: string): string => {
-    const host = rawHost.trim();
-    if (!host || host === "0.0.0.0" || host === "::") return "localhost";
-    if (host.includes(":") && !host.startsWith("[") && !host.endsWith("]")) return `[${host}]`;
-    return host;
-  };
-  const vars: Record<string, string> = {
-    PAPERCLIP_AGENT_ID: agent.id,
-    PAPERCLIP_COMPANY_ID: agent.companyId,
-  };
-  const runtimeHost = resolveHostForUrl(
-    process.env.PAPERCLIP_LISTEN_HOST ?? process.env.HOST ?? "localhost",
-  );
-  const runtimePort = process.env.PAPERCLIP_LISTEN_PORT ?? process.env.PORT ?? "3100";
-  const apiUrl =
-    process.env.PAPERCLIP_RUNTIME_API_URL ??
-    process.env.PAPERCLIP_API_URL ??
-    `http://${runtimeHost}:${runtimePort}`;
-  vars.PAPERCLIP_API_URL = apiUrl;
-  return vars;
+  return buildPaperclipEnvFrom(agent, process.env);
 }
 
 export function applyPaperclipWorkspaceEnv(

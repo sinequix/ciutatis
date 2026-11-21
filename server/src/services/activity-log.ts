@@ -8,6 +8,7 @@ import { redactCurrentUserValue } from "../log-redaction.js";
 import { sanitizeRecord } from "../redaction.js";
 import { logger } from "../middleware/logger.js";
 import type { PluginEventBus } from "./plugin-event-bus.js";
+import { instanceSettingsService } from "./instance-settings.js";
 
 const PLUGIN_EVENT_SET: ReadonlySet<string> = new Set(PLUGIN_EVENT_TYPES);
 const ACTIVITY_ACTION_TO_PLUGIN_EVENT: Readonly<Record<string, PluginEventType>> = {
@@ -62,8 +63,13 @@ export interface LogActivityInput {
 }
 
 export async function logActivity(db: Db, input: LogActivityInput) {
+  const currentUserRedactionOptions = {
+    enabled: (await instanceSettingsService(db).getGeneral()).censorUsernameInLogs,
+  };
   const sanitizedDetails = input.details ? sanitizeRecord(input.details) : null;
-  const redactedDetails = sanitizedDetails ? redactCurrentUserValue(sanitizedDetails) : null;
+  const redactedDetails = sanitizedDetails
+    ? redactCurrentUserValue(sanitizedDetails, currentUserRedactionOptions)
+    : null;
   await db.insert(activityLog).values({
     companyId: input.companyId,
     actorType: input.actorType,
@@ -73,7 +79,7 @@ export async function logActivity(db: Db, input: LogActivityInput) {
     entityId: input.entityId,
     agentId: input.agentId ?? null,
     runId: input.runId ?? null,
-    details: redactedDetails as Record<string, unknown> | null,
+    details: redactedDetails,
   });
 
   publishLiveEvent({
@@ -103,7 +109,7 @@ export async function logActivity(db: Db, input: LogActivityInput) {
       entityType: input.entityType,
       companyId: input.companyId,
       payload: {
-        ...(redactedDetails ?? {}),
+        ...redactedDetails,
         agentId: input.agentId ?? null,
         runId: input.runId ?? null,
       },

@@ -10,8 +10,6 @@ export {
   registerServerAdapter,
   unregisterServerAdapter,
   requireServerAdapter,
-  setOverridePaused,
-  isOverridePaused,
 } from "./registry.js";
 export type {
   ServerAdapterModule,

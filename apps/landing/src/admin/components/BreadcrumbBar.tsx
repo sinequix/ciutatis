@@ -115,16 +115,6 @@ export function BreadcrumbBar() {
           <h1 className="text-sm font-semibold tracking-wide truncate" title={breadcrumbs[0].label}>
             {breadcrumbs[0].label}
           </h1>
-          {breadcrumbs[0].leading ? (
-            <h1 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wider">
-              <span className="flex shrink-0 items-center">{breadcrumbs[0].leading}</span>
-              <span className="truncate">{breadcrumbs[0].label}</span>
-            </h1>
-          ) : (
-            <h1 className="text-sm font-semibold uppercase tracking-wider truncate">
-              {breadcrumbs[0].label}
-            </h1>
-          )}
         </div>
         {searchTrigger}
         {globalToolbarSlots}
@@ -148,14 +138,6 @@ export function BreadcrumbBar() {
                   <BreadcrumbItem className={isLast ? "min-w-0" : "shrink-0"}>
                     {isLast || !crumb.href ? (
                       <BreadcrumbPage className="truncate" title={crumb.label}>{crumb.label}</BreadcrumbPage>
-                      crumb.leading ? (
-                        <BreadcrumbPage className="flex min-w-0 items-center gap-1.5">
-                          <span className="flex shrink-0 items-center">{crumb.leading}</span>
-                          <span className="truncate">{crumb.label}</span>
-                        </BreadcrumbPage>
-                      ) : (
-                        <BreadcrumbPage className="truncate">{crumb.label}</BreadcrumbPage>
-                      )
                     ) : (
                       <BreadcrumbLink asChild>
                         {crumb.leading ? (

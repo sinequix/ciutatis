@@ -1,6 +1,7 @@
 import type { Db } from "@paperclipai/db";
 import { companies, instanceSettings } from "@paperclipai/db";
 import {
+  DEFAULT_FEEDBACK_DATA_SHARING_PREFERENCE,
   DEFAULT_BACKUP_RETENTION,
   DEFAULT_ISSUE_GRAPH_LIVENESS_AUTO_RECOVERY_LOOKBACK_HOURS,
   instanceGeneralSettingsSchema,
@@ -15,7 +16,6 @@ import {
 import { eq } from "drizzle-orm";
 
 const DEFAULT_SINGLETON_KEY = "default";
-const GENERAL_SETTINGS_KEY = "_general";
 const instanceGeneralSettingsStorageSchema = instanceGeneralSettingsSchema.strip();
 const instanceExperimentalSettingsStorageSchema = instanceExperimentalSettingsSchema.strip();
 const TRUTHY_RUNTIME_ENV_VALUES = new Set(["1", "true", "yes", "on"]);
@@ -180,15 +180,7 @@ export async function resolveWorktreeRunExecutionActivationState(options: {
 function normalizeGeneralSettings(raw: unknown): InstanceGeneralSettings {
   const parsed = instanceGeneralSettingsStorageSchema.safeParse(raw ?? {});
   if (parsed.success) {
-    const data = parsed.data as Record<string, unknown>;
     return {
-      instanceName: typeof data.instanceName === "string" ? data.instanceName : "Ciutatis",
-      contactEmail: typeof data.contactEmail === "string" ? data.contactEmail : null,
-      timezone: typeof data.timezone === "string" ? data.timezone : "UTC",
-      locale: typeof data.locale === "string" ? data.locale : "en",
-      backupRetention: typeof data.backupRetention === "number" ? data.backupRetention : DEFAULT_BACKUP_RETENTION,
-      censorUsernameInLogs: typeof data.censorUsernameInLogs === "boolean" ? data.censorUsernameInLogs : false,
-      autoRestartDevServerWhenIdle: typeof data.autoRestartDevServerWhenIdle === "boolean" ? data.autoRestartDevServerWhenIdle : false,
       censorUsernameInLogs: parsed.data.censorUsernameInLogs ?? false,
       keyboardShortcuts: parsed.data.keyboardShortcuts ?? false,
       feedbackDataSharingPreference:
@@ -199,13 +191,10 @@ function normalizeGeneralSettings(raw: unknown): InstanceGeneralSettings {
     };
   }
   return {
-    instanceName: "Ciutatis",
-    contactEmail: null,
-    timezone: "UTC",
-    locale: "en",
-    backupRetention: DEFAULT_BACKUP_RETENTION,
     censorUsernameInLogs: false,
-    autoRestartDevServerWhenIdle: false,
+    keyboardShortcuts: false,
+    feedbackDataSharingPreference: DEFAULT_FEEDBACK_DATA_SHARING_PREFERENCE,
+    backupRetention: DEFAULT_BACKUP_RETENTION,
   };
 }
 
@@ -270,11 +259,8 @@ export function normalizeExperimentalSettings(raw: unknown): InstanceExperimenta
 }
 
 function toInstanceSettings(row: typeof instanceSettings.$inferSelect): InstanceSettings {
-  const experimental = (row.experimental ?? {}) as Record<string, unknown>;
   return {
     id: row.id,
-    general: normalizeGeneralSettings(experimental[GENERAL_SETTINGS_KEY]),
-    experimental: normalizeExperimentalSettings(experimental),
     defaultEnvironmentId: row.defaultEnvironmentId ?? null,
     general: normalizeGeneralSettings(row.general),
     experimental: normalizeExperimentalSettings(row.experimental),
@@ -297,6 +283,7 @@ export function instanceSettingsService(db: Db, options: InstanceSettingsService
       .insert(instanceSettings)
       .values({
         singletonKey: DEFAULT_SINGLETON_KEY,
+        general: {},
         experimental: {},
         createdAt: now,
         updatedAt: now,
@@ -342,8 +329,7 @@ export function instanceSettingsService(db: Db, options: InstanceSettingsService
 
     getGeneral: async (): Promise<InstanceGeneralSettings> => {
       const row = await getOrCreateRow();
-      const experimental = (row.experimental ?? {}) as Record<string, unknown>;
-      return normalizeGeneralSettings(experimental[GENERAL_SETTINGS_KEY]);
+      return normalizeGeneralSettings(row.general);
     },
 
     getExperimental: async (): Promise<InstanceExperimentalSettings> => {
@@ -353,16 +339,15 @@ export function instanceSettingsService(db: Db, options: InstanceSettingsService
 
     updateGeneral: async (patch: PatchInstanceGeneralSettings): Promise<InstanceSettings> => {
       const current = await getOrCreateRow();
-      const experimental = { ...(current.experimental ?? {}) } as Record<string, unknown>;
       const nextGeneral = normalizeGeneralSettings({
-        ...normalizeGeneralSettings(experimental[GENERAL_SETTINGS_KEY]),
+        ...normalizeGeneralSettings(current.general),
         ...patch,
       });
       const now = new Date();
       const [updated] = await db
         .update(instanceSettings)
         .set({
-          experimental: { ...experimental, [GENERAL_SETTINGS_KEY]: nextGeneral },
+          general: { ...nextGeneral },
           updatedAt: now,
         })
         .where(eq(instanceSettings.id, current.id))

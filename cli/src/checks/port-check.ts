@@ -1,8 +1,8 @@
-import type { CiutatisConfig } from "../config/schema.js";
+import type { PaperclipConfig } from "../config/schema.js";
 import { checkPort } from "../utils/net.js";
 import type { CheckResult } from "./index.js";
 
-export async function portCheck(config: CiutatisConfig): Promise<CheckResult> {
+export async function portCheck(config: PaperclipConfig): Promise<CheckResult> {
   const port = config.server.port;
   const result = await checkPort(port);
 

@@ -22,3 +22,9 @@ export function fieldMatchesVisibleWhen(
   if (!key || values.length === 0) return false;
   return values.includes(String(getValue(key)));
 }
+
+export {
+  buildSchemaAdapterConfig,
+  invalidateConfigSchemaCache,
+  SchemaConfigFields,
+} from "./schema-config-panel";

@@ -19,30 +19,6 @@ type PartialConfig = {
   };
 };
 
-function expandHomePrefix(value: string): string {
-  if (value === "~") return os.homedir();
-  if (value.startsWith("~/")) return path.resolve(os.homedir(), value.slice(2));
-  return value;
-}
-
-function resolveCiutatisHomeDir(): string {
-  const envHome = process.env.PAPERCLIP_HOME?.trim();
-  if (envHome) return path.resolve(expandHomePrefix(envHome));
-  return path.resolve(os.homedir(), ".paperclip");
-}
-
-function resolveCiutatisInstanceId(): string {
-  const raw = process.env.PAPERCLIP_INSTANCE_ID?.trim() || "default";
-  if (!/^[a-zA-Z0-9_-]+$/.test(raw)) {
-    throw new Error(`Invalid PAPERCLIP_INSTANCE_ID '${raw}'.`);
-  }
-  return raw;
-}
-
-function resolveDefaultConfigPath(): string {
-  return path.resolve(resolveCiutatisHomeDir(), "instances", resolveCiutatisInstanceId(), "config.json");
-}
-
 function readConfig(configPath: string): PartialConfig | null {
   if (!existsSync(configPath)) return null;
   try {
@@ -74,10 +50,6 @@ function resolveConnectionString(config: PartialConfig | null): string {
 
   const port = resolveEmbeddedPort(config);
   return `postgres://paperclip:paperclip@127.0.0.1:${port}/paperclip`;
-}
-
-function resolveDefaultBackupDir(): string {
-  return path.resolve(resolveCiutatisHomeDir(), "instances", resolveCiutatisInstanceId(), "data", "backups");
 }
 
 function resolveBackupDir(config: PartialConfig | null): string {

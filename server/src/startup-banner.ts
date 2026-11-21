@@ -1,10 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
-import { resolveCiutatisConfigPath, resolveCiutatisEnvPath } from "./paths.js";
-import type { DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
+import { resolvePaperclipConfigPath, resolvePaperclipEnvPath } from "./paths.js";
+import type { BindMode, DeploymentExposure, DeploymentMode } from "@paperclipai/shared";
 
 import { parse as parseEnvFileContents } from "dotenv";
 
-type UiMode = "none" | "static";
+type UiMode = "none" | "static" | "vite-dev";
 
 type ExternalPostgresInfo = {
   mode: "external-postgres";
@@ -18,6 +18,7 @@ type EmbeddedPostgresInfo = {
 };
 
 type StartupBannerOptions = {
+  bind: BindMode;
   host: string;
   deploymentMode: DeploymentMode;
   deploymentExposure: DeploymentExposure;
@@ -49,8 +50,6 @@ const ansi = {
 function color(text: string, c: keyof typeof ansi): string {
   return `${ansi[c]}${text}${ansi.reset}`;
 }
-
-const productName = color("Ciutatis", "cyan");
 
 function row(label: string, value: string): string {
   return `${color(label.padEnd(16), "dim")} ${value}`;
@@ -94,7 +93,7 @@ function resolveAgentJwtSecretStatus(
 
   return {
     status: "warn",
-    message: "missing (run `pnpm ciutatis onboard`)",
+    message: "missing (run `pnpm paperclipai onboard`)",
   };
 }
 
@@ -103,8 +102,8 @@ export function printStartupBanner(opts: StartupBannerOptions): void {
   const baseUrl = `http://${baseHost}:${opts.listenPort}`;
   const apiUrl = `${baseUrl}/api`;
   const uiUrl = opts.uiMode === "none" ? "disabled" : baseUrl;
-  const configPath = resolveCiutatisConfigPath();
-  const envFilePath = resolveCiutatisEnvPath();
+  const configPath = resolvePaperclipConfigPath();
+  const envFilePath = resolvePaperclipEnvPath();
   const agentJwtSecret = resolveAgentJwtSecretStatus(envFilePath);
 
   const dbMode =
@@ -112,9 +111,11 @@ export function printStartupBanner(opts: StartupBannerOptions): void {
       ? color("embedded-postgres", "green")
       : color("external-postgres", "yellow");
   const uiMode =
-    opts.uiMode === "static"
-      ? color("static-ui", "magenta")
-      : color("headless-api", "yellow");
+    opts.uiMode === "vite-dev"
+      ? color("vite-dev-middleware", "cyan")
+      : opts.uiMode === "static"
+        ? color("static-ui", "magenta")
+        : color("headless-api", "yellow");
 
   const portValue =
     opts.requestedPort === opts.listenPort
@@ -134,8 +135,6 @@ export function printStartupBanner(opts: StartupBannerOptions): void {
     : color("disabled", "yellow");
 
   const art = [
-    productName,
-    color("Ciutatis", "cyan"),
     color("██████╗  █████╗ ██████╗ ███████╗██████╗  ██████╗██╗     ██╗██████╗ ", "cyan"),
     color("██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██║██╔══██╗", "cyan"),
     color("██████╔╝███████║██████╔╝█████╗  ██████╔╝██║     ██║     ██║██████╔╝", "cyan"),
@@ -150,6 +149,7 @@ export function printStartupBanner(opts: StartupBannerOptions): void {
     color("  ───────────────────────────────────────────────────────", "blue"),
     row("Mode", `${dbMode}  |  ${uiMode}`),
     row("Deploy", `${opts.deploymentMode} (${opts.deploymentExposure})`),
+    row("Bind", `${opts.bind} ${color(`(${opts.host})`, "dim")}`),
     row("Auth", opts.authReady ? color("ready", "green") : color("not-ready", "yellow")),
     row("Server", portValue),
     row("API", `${apiUrl} ${color(`(health: ${apiUrl}/health)`, "dim")}`),

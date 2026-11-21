@@ -36,7 +36,7 @@ export type ActiveIssueTreePauseHoldGate = {
   releasePolicy: IssueTreeHoldReleasePolicy | null;
 };
 type ActorInput = {
-  actorType: "user" | "agent" | "system" | "plugin";
+  actorType: "user" | "agent" | "system";
   actorId: string;
   agentId?: string | null;
   userId?: string | null;
@@ -261,7 +261,6 @@ function toHold(row: HoldRow, members?: HoldMemberRow[]): IssueTreeHold {
     createdByAgentId: row.createdByAgentId,
     createdByUserId: row.createdByUserId,
     createdByRunId: row.createdByRunId,
-    supersededByHoldId: row.supersededByHoldId,
     releasedAt: row.releasedAt,
     releasedByActorType: row.releasedByActorType as IssueTreeHold["releasedByActorType"],
     releasedByAgentId: row.releasedByAgentId,
@@ -293,7 +292,6 @@ function toHoldMember(row: HoldMemberRow): IssueTreeHoldMember {
     skipped: row.skipped,
     skipReason: row.skipReason,
     createdAt: row.createdAt,
-    updatedAt: row.updatedAt,
   };
 }
 
@@ -335,7 +333,7 @@ function buildAffectedAgents(issuesToPreview: IssueTreePreviewIssue[]): IssueTre
     for (const agentId of agentIds) {
       const current = byAgentId.get(agentId) ?? { agentId, issueCount: 0, activeRunCount: 0 };
       current.issueCount += 1;
-      if (issue.activeRun?.agentId === agentId) current.activeRunCount = (current.activeRunCount ?? 0) + 1;
+      if (issue.activeRun?.agentId === agentId) current.activeRunCount += 1;
       byAgentId.set(agentId, current);
     }
   }

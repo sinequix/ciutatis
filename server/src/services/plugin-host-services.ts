@@ -1,8 +1,4 @@
-// Stub - plugin-host-services not in Ciutatis V1 scope
-// This file exists only to satisfy upstream imports
-
 import type { Db } from "@paperclipai/db";
-import type { HostServices } from "@paperclipai/plugin-sdk";
 import {
   activityLog,
   agentTaskSessions as agentTaskSessionsTable,
@@ -52,6 +48,7 @@ import { pluginDatabaseService } from "./plugin-database.js";
 import { pluginManagedAgentService } from "./plugin-managed-agents.js";
 import { pluginManagedRoutineService } from "./plugin-managed-routines.js";
 import { pluginManagedSkillService } from "./plugin-managed-skills.js";
+import {
   assertConfiguredLocalFolder,
   assertWritableConfiguredLocalFolder,
   getStoredLocalFolders,
@@ -74,35 +71,191 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { logger } from "../middleware/logger.js";
+import { getTelemetryClient } from "../telemetry.js";
 import { accessService } from "./access.js";
 import { authorizationService, type AuthorizationActor } from "./authorization.js";
 import { sanitizeRecord } from "../redaction.js";
 
-export interface PluginHostService {
-  registerHost(): Promise<void>;
-  unregisterHost(): Promise<void>;
+// ---------------------------------------------------------------------------
+// SSRF protection for plugin HTTP fetch
+// ---------------------------------------------------------------------------
+
+/** Maximum time (ms) a plugin fetch request may take before being aborted. */
+const PLUGIN_FETCH_TIMEOUT_MS = 30_000;
+
+/** Maximum time (ms) to wait for a DNS lookup before aborting. */
+const DNS_LOOKUP_TIMEOUT_MS = 5_000;
+
+/** Only these protocols are allowed for plugin HTTP requests. */
+const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
+const TELEMETRY_EVENT_NAME_REGEX = /^[a-z0-9][a-z0-9_-]*$/;
+
+/**
+ * Check if an IP address is in a private/reserved range (RFC 1918, loopback,
+ * link-local, etc.) that plugins should never be able to reach.
+ *
+ * Handles IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1) which Node's
+ * dns.lookup may return depending on OS configuration.
+ */
+function isPrivateIP(ip: string): boolean {
+  const lower = ip.toLowerCase();
+
+  // Unwrap IPv4-mapped IPv6 addresses (::ffff:x.x.x.x) and re-check as IPv4
+  const v4MappedMatch = lower.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (v4MappedMatch && v4MappedMatch[1]) return isPrivateIP(v4MappedMatch[1]);
+
+  // IPv4 patterns
+  if (ip.startsWith("10.")) return true;
+  if (ip.startsWith("172.")) {
+    const second = parseInt(ip.split(".")[1]!, 10);
+    if (second >= 16 && second <= 31) return true;
+  }
+  if (ip.startsWith("192.168.")) return true;
+  if (ip.startsWith("127.")) return true;                   // loopback
+  if (ip.startsWith("169.254.")) return true;               // link-local
+  if (ip === "0.0.0.0") return true;
+
+  // IPv6 patterns
+  if (lower === "::1") return true;                          // loopback
+  if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // ULA
+  if (lower.startsWith("fe80")) return true;                 // link-local
+  if (lower === "::") return true;
+
+  return false;
 }
 
-export function pluginHostService(_db: Db): PluginHostService {
+/**
+ * Validate a URL for plugin fetch: protocol whitelist + private IP blocking.
+ *
+ * SSRF Prevention Strategy:
+ * 1. Parse and validate the URL syntax
+ * 2. Enforce protocol whitelist (http/https only)
+ * 3. Resolve the hostname to IP(s) via DNS
+ * 4. Validate that ALL resolved IPs are non-private
+ * 5. Pin the first safe IP into the URL so fetch() does not re-resolve DNS
+ *
+ * This prevents DNS rebinding attacks where an attacker controls DNS to
+ * resolve to a safe IP during validation, then to a private IP when fetch() runs.
+ *
+ * @returns Request-routing metadata used to connect directly to the resolved IP
+ *          while preserving the original hostname for HTTP Host and TLS SNI.
+ */
+interface ValidatedFetchTarget {
+  parsedUrl: URL;
+  resolvedAddress: string;
+  hostHeader: string;
+  tlsServername?: string;
+  useTls: boolean;
+}
+
+async function validateAndResolveFetchUrl(urlString: string): Promise<ValidatedFetchTarget> {
+  let parsed: URL;
+  try {
+    parsed = new URL(urlString);
+  } catch {
+    throw new Error(`Invalid URL: ${urlString}`);
+  }
+
+  if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
+    throw new Error(
+      `Disallowed protocol "${parsed.protocol}" — only http: and https: are permitted`,
+    );
+  }
+
+  // Resolve the hostname to an IP and check for private ranges.
+  // We pin the resolved IP into the URL to eliminate the TOCTOU window
+  // between DNS resolution here and the second resolution fetch() would do.
+  const originalHostname = parsed.hostname.replace(/^\[|\]$/g, ""); // strip IPv6 brackets
+  const hostHeader = parsed.host; // includes port if non-default
+
+  // Race the DNS lookup against a timeout to prevent indefinite hangs
+  // when DNS is misconfigured or unresponsive.
+  const dnsPromise = dnsLookup(originalHostname, { all: true });
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(
+      () => reject(new Error(`DNS lookup timed out after ${DNS_LOOKUP_TIMEOUT_MS}ms for ${originalHostname}`)),
+      DNS_LOOKUP_TIMEOUT_MS,
+    );
+  });
+
+  try {
+    const results = await Promise.race([dnsPromise, timeoutPromise]);
+    if (results.length === 0) {
+      throw new Error(`DNS resolution returned no results for ${originalHostname}`);
+    }
+
+    // Filter to only non-private IPs instead of rejecting the entire request
+    // when some IPs are private. This handles multi-homed hosts that resolve
+    // to both private and public addresses.
+    const safeResults = results.filter((entry) => !isPrivateIP(entry.address));
+    if (safeResults.length === 0) {
+      throw new Error(
+        `All resolved IPs for ${originalHostname} are in private/reserved ranges`,
+      );
+    }
+
+    const resolved = safeResults[0]!;
+    return {
+      parsedUrl: parsed,
+      resolvedAddress: resolved.address,
+      hostHeader,
+      tlsServername: parsed.protocol === "https:" && isIP(originalHostname) === 0
+        ? originalHostname
+        : undefined,
+      useTls: parsed.protocol === "https:",
+    };
+  } catch (err) {
+    // Re-throw our own errors; wrap DNS failures
+    if (err instanceof Error && (
+      err.message.startsWith("All resolved IPs") ||
+      err.message.startsWith("DNS resolution returned") ||
+      err.message.startsWith("DNS lookup timed out")
+    )) throw err;
+    throw new Error(`DNS resolution failed for ${originalHostname}: ${(err as Error).message}`);
+  }
+}
+
+function buildPinnedRequestOptions(
+  target: ValidatedFetchTarget,
+  init?: RequestInit,
+): { options: HttpRequestOptions & { servername?: string }; body: string | undefined } {
+  const headers = new Headers(init?.headers);
+  const method = init?.method ?? "GET";
+  const body = init?.body === undefined || init?.body === null
+    ? undefined
+    : typeof init.body === "string"
+      ? init.body
+      : String(init.body);
+
+  headers.set("Host", target.hostHeader);
+  if (body !== undefined && !headers.has("content-length") && !headers.has("transfer-encoding")) {
+    headers.set("content-length", String(Buffer.byteLength(body)));
+  }
+
+  const pathname = `${target.parsedUrl.pathname}${target.parsedUrl.search}`;
+  const auth = target.parsedUrl.username || target.parsedUrl.password
+    ? `${decodeURIComponent(target.parsedUrl.username)}:${decodeURIComponent(target.parsedUrl.password)}`
+    : undefined;
+
   return {
-    async registerHost() {
-      // No-op - feature not in V1
+    options: {
+      protocol: target.parsedUrl.protocol,
+      host: target.resolvedAddress,
+      port: target.parsedUrl.port
+        ? Number(target.parsedUrl.port)
+        : target.useTls
+          ? 443
+          : 80,
+      path: pathname,
+      method,
+      headers: Object.fromEntries(headers.entries()),
+      auth,
+      servername: target.tlsServername,
     },
-    async unregisterHost() {
-      // No-op - feature not in V1
-    },
+    body,
   };
 }
 
-// Additional exports required by upstream app.ts
-export function buildHostServices(
-  _db: Db,
-  _pluginId: string,
-  _manifestId: string,
-  _eventBus: unknown,
-  _notifyWorker: (method: string, params: unknown) => void,
-  _options: { pluginWorkerManager: unknown; manifest: unknown },
-): HostServices & { dispose(): Promise<void> } {
 async function executePinnedHttpRequest(
   target: ValidatedFetchTarget,
   init: RequestInit | undefined,
@@ -334,6 +487,7 @@ if (_logFlushInterval.unref) _logFlushInterval.unref();
 /** Maximum time (ms) to keep a session event subscription alive before forcing cleanup. */
 const SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS = 30 * 60 * 1_000; // 30 minutes
 
+export function buildHostServices(
   db: Db,
   pluginId: string,
   pluginKey: string,
@@ -907,14 +1061,14 @@ const SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS = 30 * 60 * 1_000; // 30 minutes
   };
 
   return {
-    config: { get: async () => ({}) },
+    config: {
+      async get() {
+        const configRow = await registry.getConfig(pluginId);
+        return configRow?.configJson ?? {};
+      },
+    },
+
     localFolders: {
-      declarations: async () => ({ folders: [] }),
-      configure: async () => ({ folder: null }),
-      status: async () => ({ status: "not_configured" as const }),
-      list: async () => ({ entries: [] }),
-      readText: async () => ({ content: null }),
-      writeTextAtomic: async () => ({ success: false }),
       async declarations() {
         return options.manifest?.localFolders ?? [];
       },
@@ -998,38 +1152,114 @@ const SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS = 30 * 60 * 1_000; // 30 minutes
         return inspectStoredLocalFolder(companyId, params.folderKey);
       },
     },
+
     state: {
-      get: async () => ({ value: null }),
-      set: async () => {},
-      delete: async () => {},
+      async get(params) {
+        return stateStore.get(pluginId, params.scopeKind as any, params.stateKey, {
+          scopeId: params.scopeId,
+          namespace: params.namespace,
+        });
+      },
+      async set(params) {
+        await stateStore.set(pluginId, {
+          scopeKind: params.scopeKind as any,
+          scopeId: params.scopeId,
+          namespace: params.namespace,
+          stateKey: params.stateKey,
+          value: params.value,
+        });
+      },
+      async delete(params) {
+        await stateStore.delete(pluginId, params.scopeKind as any, params.stateKey, {
+          scopeId: params.scopeId,
+          namespace: params.namespace,
+        });
+      },
     },
+
     db: {
-      namespace: async () => ({ namespace: "", tables: [] }),
-      query: async () => ({ rows: [] }),
-      execute: async () => ({ rowCount: 0 }),
+      async namespace() {
+        return pluginDb.getRuntimeNamespace(pluginId);
+      },
+      async query(params) {
+        return pluginDb.query(pluginId, params.sql, params.params);
+      },
+      async execute(params) {
+        return pluginDb.execute(pluginId, params.sql, params.params);
+      },
     },
+
     entities: {
-      upsert: async () => ({ entity: null }),
-      list: async () => ({ entities: [] }),
+      async upsert(params) {
+        return registry.upsertEntity(pluginId, params as any) as any;
+      },
+      async list(params) {
+        return registry.listEntities(pluginId, params as any) as any;
+      },
     },
+
     events: {
-      emit: async () => {},
-      subscribe: async () => {},
+      async emit(params) {
+        if (params.companyId) {
+          await ensurePluginAvailableForCompany(params.companyId);
+        }
+        await scopedBus.emit(params.name, params.companyId, params.payload);
+      },
+      async subscribe(params: { eventPattern: string; filter?: Record<string, unknown> | null }) {
+        const handler = async (event: import("@paperclipai/plugin-sdk").PluginEvent) => {
+          if (notifyWorker) {
+            notifyWorker("onEvent", { event });
+          }
+        };
+        if (params.filter) {
+          scopedBus.subscribe(params.eventPattern as any, params.filter as any, handler);
+        } else {
+          scopedBus.subscribe(params.eventPattern as any, handler);
+        }
+      },
     },
+
     http: {
-      fetch: async () => ({ status: 200, headers: {}, body: {} }),
+      async fetch(params) {
+        // SSRF protection: validate protocol whitelist + block private IPs.
+        // Resolve once, then connect directly to that IP to prevent DNS rebinding.
+        const target = await validateAndResolveFetchUrl(params.url);
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), PLUGIN_FETCH_TIMEOUT_MS);
+
+        try {
+          const init = params.init as RequestInit | undefined;
+          return await executePinnedHttpRequest(target, init, controller.signal);
+        } finally {
+          clearTimeout(timeout);
+        }
+      },
     },
+
     secrets: {
-      resolve: async () => "",
+      async resolve(params) {
+        return secretsHandler.resolve(params);
+      },
     },
+
     activity: {
-      log: async () => {},
+      async log(params) {
+        const companyId = ensureCompanyId(params.companyId);
+        await ensurePluginAvailableForCompany(companyId);
+        await logActivity(db, {
+          companyId,
+          actorType: "plugin",
+          actorId: pluginId,
+          action: params.message,
+          entityType: params.entityType ?? "plugin",
+          entityId: params.entityId ?? pluginId,
+          details: pluginActivityDetails(params.metadata),
+        });
+      },
     },
+
     metrics: {
-      write: async () => {},
-    },
-    logger: {
-      log: async () => {},
       async write(params) {
         const safeName = truncStr(String(params.name ?? ""), MAX_METRIC_NAME_LENGTH);
         logger.debug({ pluginId, name: safeName, value: params.value, tags: params.tags }, "Plugin metric write");
@@ -1052,14 +1282,23 @@ const SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS = 30 * 60 * 1_000; // 30 minutes
           });
         }
       },
+    },
 
+    telemetry: {
       async track(params) {
         const eventName = String(params.eventName ?? "").trim();
+        if (!TELEMETRY_EVENT_NAME_REGEX.test(eventName)) {
           throw new Error(
+            'Plugin telemetry event names must be lowercase slugs using letters, numbers, "_" or "-".',
           );
         }
+        const telemetryClient = getTelemetryClient();
+        if (!telemetryClient) return;
+        telemetryClient.trackDynamic(`plugin.${pluginKey}.${eventName}`, params.dimensions);
       },
+    },
 
+    logger: {
       async log(params) {
         const { level, meta } = params;
         const safeMessage = truncStr(String(params.message ?? ""), MAX_LOG_MESSAGE_LENGTH);
@@ -1093,14 +1332,17 @@ const SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS = 30 * 60 * 1_000; // 30 minutes
         }
       },
     },
-    dispose: async () => {
-      // No-op cleanup
-    },
-  } as unknown as HostServices & { dispose(): Promise<void> };
-}
 
-export function flushPluginLogBuffer() {
-  // No-op - feature not in V1
+    companies: {
+      async list(params) {
+        return applyWindow((await companies.list()) as Company[], params);
+      },
+      async get(params) {
+        await ensurePluginAvailableForCompany(params.companyId);
+        return (await companies.getById(params.companyId)) as Company;
+      },
+    },
+
     projects: {
       async list(params) {
         const companyId = ensureCompanyId(params.companyId);

@@ -196,11 +196,6 @@ export function AuthPage() {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 autoComplete={mode === "sign_up" ? "new-password" : "current-password"}
-                autoComplete={mode === "sign_in" ? "current-password" : "new-password"}
-                required
-                aria-required="true"
-                aria-invalid={error ? true : undefined}
-                aria-describedby={error ? errorId : undefined}
               />
             </div>
             {error && (

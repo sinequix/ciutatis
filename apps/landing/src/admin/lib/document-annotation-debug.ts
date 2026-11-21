@@ -87,7 +87,7 @@ function createState(): SelectionDebugState {
 }
 
 export function isSelectionDebugEnabled(): boolean {
-  if (import.meta.env.MODE === "production" || typeof window === "undefined") return false;
+  if (process.env.NODE_ENV === "production" || typeof window === "undefined") return false;
   try {
     const value = window.localStorage.getItem(SELECTION_DEBUG_STORAGE_KEY);
     return value === "1" || value === "true";

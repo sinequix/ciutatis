@@ -1,9 +1,9 @@
 import fs from "node:fs";
-import type { CiutatisConfig } from "../config/schema.js";
+import type { PaperclipConfig } from "../config/schema.js";
 import type { CheckResult } from "./index.js";
 import { resolveRuntimeLikePath } from "./path-resolver.js";
 
-export async function databaseCheck(config: CiutatisConfig, configPath?: string): Promise<CheckResult> {
+export async function databaseCheck(config: PaperclipConfig, configPath?: string): Promise<CheckResult> {
   if (config.database.mode === "postgres") {
     if (!config.database.connectionString) {
       return {
@@ -11,7 +11,7 @@ export async function databaseCheck(config: CiutatisConfig, configPath?: string)
         status: "fail",
         message: "PostgreSQL mode selected but no connection string configured",
         canRepair: false,
-        repairHint: "Run `ciutatis configure --section database`",
+        repairHint: "Run `paperclipai configure --section database`",
       };
     }
 
@@ -54,6 +54,6 @@ export async function databaseCheck(config: CiutatisConfig, configPath?: string)
     status: "fail",
     message: `Unknown database mode: ${String(config.database.mode)}`,
     canRepair: false,
-    repairHint: "Run `ciutatis configure --section database`",
+    repairHint: "Run `paperclipai configure --section database`",
   };
 }

@@ -1,4 +1,3 @@
-export { institutionSecretVersions, institutionSecretVersions as companySecretVersions } from "./institution_secret_versions.js";
 import { pgTable, uuid, text, timestamp, integer, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { agents } from "./agents.js";
 import { companySecrets } from "./company_secrets.js";

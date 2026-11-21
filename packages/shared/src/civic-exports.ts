@@ -89,6 +89,13 @@ export {
   TENANT_BOOTSTRAP_STATUSES,
   TENANT_PROVISIONING_JOB_KINDS,
   TENANT_PROVISIONING_JOB_STATUSES,
+  type TenantInstanceStatus,
+  type TenantRoutingMode,
+  type TenantBootstrapStatus,
+  type TenantProvisioningJobKind,
+  type TenantProvisioningJobStatus,
+  type TenantProvisioningJobTrigger,
+  type TenantProvisioningStep,
 } from "./constants.js";
 
 export {
@@ -137,4 +144,19 @@ export {
   type InstitutionPortabilityImport,
 } from "./validators/index.js";
 
+export {
+  deriveTenantRoute,
+  deriveTenantUrl,
+  parseTenantRoutePathname,
+} from "./tenant-routing.js";
+
+export {
+  ARGENTINA_TENANT_ROUTING_CONFIG,
+  US_TENANT_ROUTING_CONFIG,
+  getTenantRoutingCountryConfig,
+} from "./tenant-routing-configs/index.js";
+
+export type { TenantProvisioner } from "./cloudflare-provisioning.js";
 export { CloudflareTenantProvisioner, MockTenantProvisioner } from "./cloudflare-provisioning.js";
+
+export type { CreateTenantInstance, UpdateTenantInstance } from "./validators/tenant-instance.js";

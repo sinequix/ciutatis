@@ -39,12 +39,12 @@ describe("buildInviteOnboardingTextDocument", () => {
       allowedHostnames: [],
     });
 
-    expect(text).toContain("Ciutatis OpenClaw Gateway Onboarding");
     expect(text).toContain("Paperclip Agent Onboarding");
     expect(text).toContain("/api/invites/token-123/accept");
     expect(text).toContain("/api/join-requests/{requestId}/claim-api-key");
     expect(text).toContain("/api/invites/token-123/onboarding.txt");
-    expect(text).toContain("Suggested Ciutatis base URLs to try");
+    expect(text).toContain("/api/invites/token-123/skills/paperclip");
+    expect(text).toContain("Suggested Paperclip base URLs to try");
     expect(text).toContain("http://localhost:3100");
     expect(text).toContain("host.docker.internal");
     expect(text).toContain("paperclipApiUrl");

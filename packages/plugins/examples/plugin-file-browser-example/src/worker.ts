@@ -1,4 +1,4 @@
-import { definePlugin, runWorker } from "@paperclipai/plugin-sdk";
+import { definePlugin, runWorker, type CiutatisPlugin } from "@paperclipai/plugin-sdk";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -61,7 +61,7 @@ function extractFilePaths(body: string): string[] {
   return [...paths];
 }
 
-const plugin = definePlugin({
+const plugin: CiutatisPlugin = definePlugin({
   async setup(ctx) {
     ctx.logger.info(`${PLUGIN_NAME} plugin setup`);
 

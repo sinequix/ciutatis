@@ -100,6 +100,8 @@ function createLocalSandboxRunner() {
 
 describe("claude_local environment diagnostics", () => {
   it("returns a warning (not an error) when ANTHROPIC_API_KEY is set in host environment", async () => {
+    delete process.env.CLAUDE_CODE_USE_BEDROCK;
+    delete process.env.ANTHROPIC_BEDROCK_BASE_URL;
     process.env.ANTHROPIC_API_KEY = "sk-test-host";
 
     const result = await testEnvironment({
@@ -125,6 +127,8 @@ describe("claude_local environment diagnostics", () => {
 
   it("returns a warning (not an error) when ANTHROPIC_API_KEY is set in adapter env", async () => {
     delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.CLAUDE_CODE_USE_BEDROCK;
+    delete process.env.ANTHROPIC_BEDROCK_BASE_URL;
 
     const result = await testEnvironment({
       companyId: "company-1",

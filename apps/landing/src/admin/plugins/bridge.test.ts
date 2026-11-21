@@ -13,7 +13,7 @@ import {
   MarkdownBlock as SdkMarkdownBlock,
   MarkdownEditor as SdkMarkdownEditor,
   type FileTreeNode as SdkFileTreeNode,
-} from "../../../packages/plugins/sdk/src/ui/components";
+} from "../../../../../packages/plugins/sdk/src/ui/components";
 import { SidebarProvider, useSidebar } from "@/context/SidebarContext";
 import {
   PluginBridgeContext,

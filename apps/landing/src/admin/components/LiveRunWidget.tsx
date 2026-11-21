@@ -101,7 +101,6 @@ export function LiveRunWidget({ issueId, companyId }: LiveRunWidgetProps) {
         </div>
         <div className="mt-1 text-xs text-muted-foreground">
           Streamed with the same transcript UI used on the full run detail page.
-          Uses the shared chat-style run surface from task activity.
         </div>
       </div>
 
@@ -157,12 +156,6 @@ export function LiveRunWidget({ issueId, companyId }: LiveRunWidgetProps) {
                   streaming={isActive}
                   collapseStdout
                   emptyMessage={hasOutputForRun(run.id) ? "Waiting for transcript parsing..." : "Waiting for run output..."}
-              <div className="max-h-(--sz-320px) overflow-y-auto pr-1">
-                <RunChatSurface
-                  run={run}
-                  transcript={transcript}
-                  hasOutput={hasOutputForRun(run.id)}
-                  companyId={companyId}
                 />
               </div>
             </section>

@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   describeLocalInstancePaths,
   expandHomePrefix,
-  resolveCiutatisHomeDir,
-  resolveCiutatisInstanceId,
+  resolvePaperclipHomeDir,
+  resolvePaperclipInstanceId,
 } from "../config/home.js";
 
 const ORIGINAL_ENV = { ...process.env };
@@ -30,13 +30,12 @@ describe("home path resolution", () => {
   it("supports PAPERCLIP_HOME and explicit instance ids", () => {
     process.env.PAPERCLIP_HOME = "~/paperclip-home";
 
-    const home = resolveCiutatisHomeDir();
+    const home = resolvePaperclipHomeDir();
     expect(home).toBe(path.resolve(os.homedir(), "paperclip-home"));
-    expect(resolveCiutatisInstanceId("dev_1")).toBe("dev_1");
+    expect(resolvePaperclipInstanceId("dev_1")).toBe("dev_1");
   });
 
   it("rejects invalid instance ids", () => {
-    expect(() => resolveCiutatisInstanceId("bad/id")).toThrow(/Invalid instance id/);
     expect(() => resolvePaperclipInstanceId("bad/id")).toThrow(/Invalid PAPERCLIP_INSTANCE_ID/);
   });
 

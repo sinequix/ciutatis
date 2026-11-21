@@ -3,7 +3,8 @@ import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import { createDb, instanceUserRoles, invites } from "@paperclipai/db";
-import { loadCiutatisEnvFile } from "../config/env.js";
+import { inferBindModeFromHost } from "@paperclipai/shared";
+import { loadPaperclipEnvFile } from "../config/env.js";
 import { readConfig, resolveConfigPath } from "../config/store.js";
 
 function hashToken(token: string) {
@@ -40,9 +41,13 @@ function resolveBaseUrl(configPath?: string, explicitBaseUrl?: string) {
   if (config?.auth.baseUrlMode === "explicit" && config.auth.publicBaseUrl) {
     return config.auth.publicBaseUrl.replace(/\/+$/, "");
   }
-  const host = config?.server.host ?? "localhost";
+  const bind = config?.server.bind ?? inferBindModeFromHost(config?.server.host);
+  const host =
+    bind === "custom"
+      ? config?.server.customBindHost ?? config?.server.host ?? "localhost"
+      : config?.server.host ?? "localhost";
   const port = config?.server.port ?? 3100;
-  const publicHost = host === "0.0.0.0" ? "localhost" : host;
+  const publicHost = host === "0.0.0.0" || bind === "lan" ? "localhost" : host;
   return `http://${publicHost}:${port}`;
 }
 
@@ -54,7 +59,7 @@ export async function bootstrapCeoInvite(opts: {
   dbUrl?: string;
 }) {
   const configPath = resolveConfigPath(opts.config);
-  loadCiutatisEnvFile(configPath);
+  loadPaperclipEnvFile(configPath);
   const config = readConfig(configPath);
   if (!config) {
     p.log.error(`No config found at ${configPath}. Run ${pc.cyan("paperclip onboard")} first.`);
@@ -126,7 +131,7 @@ export async function bootstrapCeoInvite(opts: {
     p.log.message(`Expires: ${pc.dim(created.expiresAt.toISOString())}`);
   } catch (err) {
     p.log.error(`Could not create bootstrap invite: ${err instanceof Error ? err.message : String(err)}`);
-    p.log.info("If using embedded-postgres, start the Ciutatis server and run this command again.");
+    p.log.info("If using embedded-postgres, start the Paperclip server and run this command again.");
   } finally {
     await closableDb.$client?.end?.({ timeout: 5 }).catch(() => undefined);
   }

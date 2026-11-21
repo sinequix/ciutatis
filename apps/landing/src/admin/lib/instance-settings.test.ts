@@ -5,7 +5,6 @@ import {
 } from "./instance-settings";
 
 describe("normalizeRememberedInstanceSettingsPath", () => {
-  it("keeps known instance settings pages", () => {
   it("canonicalizes known instance settings pages under company settings", () => {
     expect(normalizeRememberedInstanceSettingsPath("/instance/settings/general")).toBe(
       "/company/settings/instance/general",

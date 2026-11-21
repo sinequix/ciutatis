@@ -1,9 +1,9 @@
 import * as p from "@clack/prompts";
 import type { LoggingConfig } from "../config/schema.js";
-import { resolveDefaultLogsDir, resolveCiutatisInstanceId } from "../config/home.js";
+import { resolveDefaultLogsDir, resolvePaperclipInstanceId } from "../config/home.js";
 
 export async function promptLogging(): Promise<LoggingConfig> {
-  const defaultLogDir = resolveDefaultLogsDir(resolveCiutatisInstanceId());
+  const defaultLogDir = resolveDefaultLogsDir(resolvePaperclipInstanceId());
   const mode = await p.select({
     message: "Logging mode",
     options: [

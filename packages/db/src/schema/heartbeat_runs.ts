@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, jsonb, index, integer, bigint, boolean } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, pgTable, uuid, text, timestamp, jsonb, index, integer, bigint, boolean } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { agents } from "./agents.js";
 import { agentWakeupRequests } from "./agent_wakeup_requests.js";
@@ -32,32 +32,29 @@ export const heartbeatRuns = pgTable(
     stderrExcerpt: text("stderr_excerpt"),
     errorCode: text("error_code"),
     externalRunId: text("external_run_id"),
-    contextSnapshot: jsonb("context_snapshot").$type<Record<string, unknown>>(),
+    processPid: integer("process_pid"),
+    processGroupId: integer("process_group_id"),
+    processStartedAt: timestamp("process_started_at", { withTimezone: true }),
+    lastOutputAt: timestamp("last_output_at", { withTimezone: true }),
+    lastOutputSeq: integer("last_output_seq").notNull().default(0),
+    lastOutputStream: text("last_output_stream"),
+    lastOutputBytes: bigint("last_output_bytes", { mode: "number" }),
+    retryOfRunId: uuid("retry_of_run_id").references((): AnyPgColumn => heartbeatRuns.id, {
+      onDelete: "set null",
+    }),
+    processLossRetryCount: integer("process_loss_retry_count").notNull().default(0),
+    scheduledRetryAt: timestamp("scheduled_retry_at", { withTimezone: true }),
+    scheduledRetryAttempt: integer("scheduled_retry_attempt").notNull().default(0),
+    scheduledRetryReason: text("scheduled_retry_reason"),
+    issueCommentStatus: text("issue_comment_status").notNull().default("not_applicable"),
+    issueCommentSatisfiedByCommentId: uuid("issue_comment_satisfied_by_comment_id"),
+    issueCommentRetryQueuedAt: timestamp("issue_comment_retry_queued_at", { withTimezone: true }),
     livenessState: text("liveness_state"),
     livenessReason: text("liveness_reason"),
     continuationAttempt: integer("continuation_attempt").notNull().default(0),
-    // Upstream-only columns (not used in Ciutatis V1 but required for type compatibility)
-    processGroupId: integer("process_group_id"),
-    processPid: integer("process_pid"),
-    retryOfRunId: uuid("retry_of_run_id"),
-    processLossRetryCount: integer("process_loss_retry_count").notNull().default(0),
-    scheduledRetryAt: timestamp("scheduled_retry_at", { withTimezone: true }),
-    // Upstream-only columns for type compatibility
-    scheduledRetryAttempt: integer("scheduled_retry_attempt"),
-    scheduledRetryReason: text("scheduled_retry_reason"),
-    stopReason: text("stop_reason"),
-    stopMetadata: jsonb("stop_metadata").$type<Record<string, unknown>>(),
     lastUsefulActionAt: timestamp("last_useful_action_at", { withTimezone: true }),
-    nextAction: jsonb("next_action").$type<Record<string, unknown>>(),
-    lastOutputAt: timestamp("last_output_at", { withTimezone: true }),
-    lastOutputSeq: integer("last_output_seq"),
-    lastOutputStream: text("last_output_stream"),
-    lastOutputBytes: bigint("last_output_bytes", { mode: "number" }),
-    processStartedAt: timestamp("process_started_at", { withTimezone: true }),
-    // Upstream-only columns for issue comment retry tracking
-    issueCommentStatus: text("issue_comment_status"),
-    issueCommentSatisfiedByCommentId: uuid("issue_comment_satisfied_by_comment_id"),
-    issueCommentRetryQueuedAt: timestamp("issue_comment_retry_queued_at", { withTimezone: true }),
+    nextAction: text("next_action"),
+    contextSnapshot: jsonb("context_snapshot").$type<Record<string, unknown>>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
